@@ -1,0 +1,29 @@
+# PURPL MÉTIER - Règles Cursor
+
+## Contexte Projet
+Toujours lire et respecter le fichier PRD.md à la racine du projet.
+
+## Mise à jour documentation
+Après chaque modification structurante (nouvelle table, nouveau composant, nouvelle route), proposer une mise à jour du PRD.md pour refléter les changements.
+
+## Règles de développement
+- 1 fichier = 1 modification = 1 validation
+- Toujours proposer les modifications AVANT de les exécuter
+- Créer un backup avant chaque modification
+- Attendre la validation "OK" avant de continuer
+
+## Stack technique
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Supabase
+- Lucide React (icônes stroke)
+
+## Conventions
+- Variables/fonctions : camelCase
+- Composants : PascalCase
+- Constantes : SCREAMING_SNAKE_CASE
+- Code : anglais
+- Interface : français
+
+

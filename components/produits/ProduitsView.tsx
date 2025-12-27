@@ -1,0 +1,356 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { LayoutGrid, Columns3 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { ProduitsKanban } from "./ProduitsKanban";
+import { ProduitCard } from "./ProduitCard";
+import { ProduitModal } from "./ProduitModal";
+import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
+import { PlusIcon, SearchIcon } from "@/components/ui/Icons";
+
+// Types
+interface Produit {
+  id: string;
+  name: string;
+  reference: string | null;
+  description: string | null;
+  photo_url: string | null;
+  categorie_id: string | null;
+  prix_heure: number | null;
+  nombre_heures: number | null;
+  prix_vente_total: number | null;
+  is_active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+  produits_composants: any[];
+  categories_produits: {
+    id: string;
+    name: string;
+    color: string | null;
+  } | null;
+}
+
+interface Composant {
+  id: string;
+  name: string;
+  reference: string | null;
+  prix_vente: number | null;
+  photo_url: string | null;
+  is_active: boolean | null;
+  poids: number | null;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+interface ProduitsViewProps {
+  initialProduits: Produit[];
+  availableComposants: Composant[];
+}
+
+type ViewMode = "kanban" | "grid";
+
+export function ProduitsView({
+  initialProduits,
+  availableComposants,
+}: ProduitsViewProps) {
+  const router = useRouter();
+  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProduit, setEditingProduit] = useState<Produit | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [localProduits, setLocalProduits] = useState<Produit[]>(initialProduits);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  // Extraire les catégories des produits
+  useEffect(() => {
+    const cats = new Map<string, Category>();
+    initialProduits.forEach((p) => {
+      if (p.categories_produits) {
+        cats.set(p.categories_produits.id, p.categories_produits);
+      }
+    });
+    setCategories(Array.from(cats.values()));
+  }, [initialProduits]);
+
+  useEffect(() => {
+    setLocalProduits(initialProduits);
+  }, [initialProduits]);
+
+  const fetchCategories = async () => {
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("categories_produits")
+        .select("*")
+        .order("name");
+
+      if (data) {
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error("Erreur fetch catégories:", error);
+    }
+  };
+
+  const fetchProduits = async () => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("produits")
+        .select(`
+          *,
+          produits_composants (
+            id,
+            quantite,
+            composant:composants (
+              id,
+              name,
+              reference,
+              prix_vente,
+              photo_url,
+              poids
+            )
+          ),
+          categories_produits (
+            id,
+            name,
+            color
+          )
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setLocalProduits(data as Produit[]);
+      }
+    } catch (error) {
+      console.error("Erreur fetch produits:", error);
+    }
+  };
+
+  const handleSuccess = async () => {
+    await fetchProduits();
+    setEditingProduit(null);
+    setIsModalOpen(false);
+  };
+
+  const handleEdit = (produit: Produit) => {
+    setEditingProduit(produit);
+    setIsModalOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsModalOpen(false);
+    setEditingProduit(null);
+  };
+
+  const handleNewProduit = () => {
+    setEditingProduit(null);
+    setIsModalOpen(true);
+  };
+
+  // Filtrage pour la vue grille
+  const filteredProduits = useMemo(() => {
+    return localProduits.filter((produit) => {
+      const matchesSearch =
+        searchTerm === "" ||
+        produit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (produit.reference &&
+          produit.reference.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesCategory =
+        selectedCategory === "all" ||
+        produit.categorie_id === selectedCategory;
+
+      let matchesStatus = true;
+      if (statusFilter === "active") {
+        matchesStatus = produit.is_active === true;
+      } else if (statusFilter === "archived") {
+        matchesStatus = produit.is_active === false;
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [localProduits, searchTerm, selectedCategory, statusFilter]);
+
+  // Produits pour Kanban (format simplifié)
+  const produitsForKanban = useMemo(() => {
+    return localProduits.map((p) => ({
+      id: p.id,
+      name: p.name,
+      reference: p.reference,
+      photo_url: p.photo_url,
+      prix_vente_total: p.prix_vente_total,
+      is_active: p.is_active,
+      categorie_id: p.categorie_id,
+      categories_produits: p.categories_produits,
+      produits_composants: p.produits_composants, // Ajout pour calculer le poids
+    }));
+  }, [localProduits]);
+
+  return (
+    <>
+      {/* Header avec titre et toggle */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold" style={{ color: "#76715A" }}>
+          Produits
+        </h1>
+
+        <div className="flex items-center gap-3">
+          {/* Toggle vue */}
+          <div className="flex items-center bg-[#EDEAE3] rounded-lg p-1">
+            <button
+              onClick={() => setViewMode("kanban")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                viewMode === "kanban"
+                  ? "bg-white text-[#76715A] shadow-sm"
+                  : "text-gray-500 hover:text-[#76715A]"
+              }`}
+              title="Vue Kanban"
+            >
+              <Columns3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                viewMode === "grid"
+                  ? "bg-white text-[#76715A] shadow-sm"
+                  : "text-gray-500 hover:text-[#76715A]"
+              }`}
+              title="Vue Grille"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="hidden sm:inline">Grille</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Vue Kanban */}
+      {viewMode === "kanban" ? (
+        <ProduitsKanban
+          produits={produitsForKanban}
+          categories={categories}
+          onProduitClick={(p) => {
+            const fullProduit = localProduits.find((prod) => prod.id === p.id);
+            if (fullProduit) handleEdit(fullProduit);
+          }}
+          onNewProduit={handleNewProduit}
+        />
+      ) : (
+        /* Vue Grille */
+        <>
+          {/* Filtres */}
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            {/* Barre de recherche */}
+            <div className="w-full md:flex-1 relative">
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher un produit..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white"
+              />
+            </div>
+
+            {/* Dropdown catégories */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "__manage__") {
+                  setShowCategoryManager(true);
+                  return;
+                }
+                setSelectedCategory(value);
+              }}
+              className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white cursor-pointer"
+            >
+              <option value="all">Toutes les catégories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+              <option disabled>────────────────</option>
+              <option value="__manage__" style={{ color: "#76715A" }}>
+                ⚙ Gérer les catégories...
+              </option>
+            </select>
+
+            {/* Dropdown statut */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white cursor-pointer"
+            >
+              <option value="all">Tous</option>
+              <option value="active">Actifs uniquement</option>
+              <option value="archived">Archivés uniquement</option>
+            </select>
+
+            {/* Bouton nouveau */}
+            <button
+              onClick={handleNewProduit}
+              className="w-full md:w-auto bg-[#ED693A] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-[#d85a2a] transition-colors flex items-center justify-center gap-2"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Nouveau
+            </button>
+          </div>
+
+          {/* Grille */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredProduits.map((produit) => (
+              <ProduitCard
+                key={produit.id}
+                produit={produit}
+                onClick={() => handleEdit(produit)}
+                onDelete={async () => {
+                  await fetchProduits();
+                }}
+              />
+            ))}
+          </div>
+
+          {filteredProduits.length === 0 && (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-lg">Aucun produit trouvé</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modal */}
+      <ProduitModal
+        isOpen={isModalOpen}
+        onClose={handleClose}
+        onSuccess={handleSuccess}
+        editingProduit={editingProduit}
+        availableComposants={availableComposants}
+      />
+
+      {/* Modal gestion catégories */}
+      {showCategoryManager && (
+        <CategoryManagerModal
+          type="produits"
+          onClose={() => setShowCategoryManager(false)}
+          onUpdate={fetchCategories}
+        />
+      )}
+    </>
+  );
+}
+
