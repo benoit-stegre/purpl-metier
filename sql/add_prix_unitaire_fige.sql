@@ -19,3 +19,4 @@ COMMENT ON COLUMN projets_produits.prix_unitaire_fige IS
 'Prix unitaire figé du produit. NULL = prix dynamique (recalculé), valeur = prix historique préservé lors du passage en_cours/termine/annule';
 
 
+

@@ -183,3 +183,4 @@ Les modals utilisent généralement `max-w-md`, `max-w-lg`, etc. mais doivent ê
 3. Procéder phase par phase avec validation à chaque étape
 
 
+

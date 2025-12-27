@@ -490,3 +490,4 @@ npx supabase gen types typescript --project-id anodesfypwifqxpsqmpt > types/data
 | 1.1 | 2025-12-25 | Picto poids, raison sociale seul obligatoire, Kanban par défaut + bouton cercle, règle prix figés, export bon de commande |
 
 
+

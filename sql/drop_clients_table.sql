@@ -30,3 +30,4 @@ AND ccu.table_name = 'clients';
 -- WHERE table_schema = 'public' AND table_name = 'clients';
 
 
+
