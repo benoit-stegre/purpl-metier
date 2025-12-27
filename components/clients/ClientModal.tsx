@@ -8,8 +8,16 @@ import {
   BackIcon,
   DeleteIcon,
 } from "@/components/ui/Icons";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
+
+interface Contact {
+  id?: string;
+  prenom: string;
+  nom: string;
+  email: string;
+  telephone: string;
+}
 
 interface Client {
   id: string;
@@ -56,10 +64,6 @@ export function ClientModal({
     raison_sociale: "",
     siret: "",
     num_tva: "",
-    contact_nom: "",
-    contact_prenom: "",
-    contact_email: "",
-    contact_telephone: "",
     adresse_ligne1: "",
     adresse_ligne2: "",
     ville: "",
@@ -70,18 +74,23 @@ export function ClientModal({
   };
 
   const [formData, setFormData] = useState(initialFormData);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
 
   // Stocker les données originales pour comparaison
   const [originalData, setOriginalData] = useState(initialFormData);
+  const [originalContacts, setOriginalContacts] = useState<Contact[]>([]);
 
   // Fetch catégories au mount
   useEffect(() => {
     if (isOpen) {
       fetchCategories();
+      if (isEditMode && client) {
+        fetchContacts(client.id);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, client]);
 
   const fetchCategories = async () => {
     try {
@@ -97,16 +106,38 @@ export function ClientModal({
     }
   };
 
+  const fetchContacts = async (clientId: string) => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at");
+
+      if (error) throw error;
+      if (data) {
+        const contactsData = data.map((c) => ({
+          id: c.id,
+          prenom: c.prenom || "",
+          nom: c.nom || "",
+          email: c.email || "",
+          telephone: c.telephone || "",
+        }));
+        setContacts(contactsData);
+        setOriginalContacts(contactsData);
+      }
+    } catch (error) {
+      console.error("Erreur fetch contacts:", error);
+    }
+  };
+
   // Fonction pour réinitialiser le formulaire
   const resetForm = () => {
     const emptyData = {
       raison_sociale: "",
       siret: "",
       num_tva: "",
-      contact_nom: "",
-      contact_prenom: "",
-      contact_email: "",
-      contact_telephone: "",
       adresse_ligne1: "",
       adresse_ligne2: "",
       ville: "",
@@ -117,6 +148,8 @@ export function ClientModal({
     };
     setFormData(emptyData);
     setOriginalData(emptyData);
+    setContacts([]);
+    setOriginalContacts([]);
   };
 
   // Charger les données en mode édition ou réinitialiser en mode création
@@ -138,10 +171,6 @@ export function ClientModal({
         raison_sociale: client.raison_sociale || "",
         siret: client.siret || "",
         num_tva: client.num_tva || "",
-        contact_nom: client.contact_nom || "",
-        contact_prenom: client.contact_prenom || "",
-        contact_email: client.contact_email || "",
-        contact_telephone: client.contact_telephone || "",
         adresse_ligne1: client.adresse_ligne1 || "",
         adresse_ligne2: client.adresse_ligne2 || "",
         ville: client.ville || "",
@@ -163,22 +192,22 @@ export function ClientModal({
 
   // Vérifier si des CHANGEMENTS ont été faits
   const hasChanges = () => {
-    return (
+    const formChanged =
       formData.raison_sociale !== originalData.raison_sociale ||
       formData.siret !== originalData.siret ||
       formData.num_tva !== originalData.num_tva ||
-      formData.contact_nom !== originalData.contact_nom ||
-      formData.contact_prenom !== originalData.contact_prenom ||
-      formData.contact_email !== originalData.contact_email ||
-      formData.contact_telephone !== originalData.contact_telephone ||
       formData.adresse_ligne1 !== originalData.adresse_ligne1 ||
       formData.adresse_ligne2 !== originalData.adresse_ligne2 ||
       formData.ville !== originalData.ville ||
       formData.code_postal !== originalData.code_postal ||
       formData.pays !== originalData.pays ||
       formData.categorie_id !== originalData.categorie_id ||
-      formData.notes !== originalData.notes
-    );
+      formData.notes !== originalData.notes;
+
+    const contactsChanged =
+      JSON.stringify(contacts) !== JSON.stringify(originalContacts);
+
+    return formChanged || contactsChanged;
   };
 
   // Handler fermeture avec confirmation SI changements
@@ -231,6 +260,29 @@ export function ClientModal({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  // Gestion des contacts
+  const addContact = () => {
+    setContacts([
+      ...contacts,
+      {
+        prenom: "",
+        nom: "",
+        email: "",
+        telephone: "",
+      },
+    ]);
+  };
+
+  const removeContact = (index: number) => {
+    setContacts(contacts.filter((_, i) => i !== index));
+  };
+
+  const updateContact = (index: number, field: keyof Contact, value: string) => {
+    const updated = [...contacts];
+    updated[index] = { ...updated[index], [field]: value };
+    setContacts(updated);
+  };
+
   // Fonction commune pour la sauvegarde
   const performSave = async () => {
     setIsLoading(true);
@@ -244,18 +296,21 @@ export function ClientModal({
         throw new Error("La raison sociale doit contenir au moins 2 caractères");
       }
 
-      if (formData.contact_email && !isValidEmail(formData.contact_email)) {
-        throw new Error("L'email n'est pas au format valide");
+      // Valider les emails des contacts
+      for (const contact of contacts) {
+        if (contact.email && !isValidEmail(contact.email)) {
+          throw new Error(`L'email "${contact.email}" n'est pas au format valide`);
+        }
       }
 
       const dataToSave = {
         raison_sociale: formData.raison_sociale,
         siret: formData.siret || null,
         num_tva: formData.num_tva || null,
-        contact_nom: formData.contact_nom || null,
-        contact_prenom: formData.contact_prenom || null,
-        contact_email: formData.contact_email || null,
-        contact_telephone: formData.contact_telephone || null,
+        contact_nom: null,
+        contact_prenom: null,
+        contact_email: null,
+        contact_telephone: null,
         adresse_ligne1: formData.adresse_ligne1 || null,
         adresse_ligne2: formData.adresse_ligne2 || null,
         ville: formData.ville || null,
@@ -265,19 +320,52 @@ export function ClientModal({
         notes: formData.notes || null,
       };
 
+      let clientId: string;
+
       if (isEditMode && client) {
         const { error: updateError } = await supabase
           .from("clients_pro")
           .update(dataToSave)
-          .eq("id", client.id);
+          .eq("id", client.id)
+          .select()
+          .single();
 
         if (updateError) throw updateError;
+        clientId = client.id;
+
+        // Supprimer tous les contacts existants
+        await supabase.from("contacts").delete().eq("client_id", clientId);
       } else {
-        const { error: insertError } = await supabase
+        const { data: newClient, error: insertError } = await supabase
           .from("clients_pro")
-          .insert(dataToSave);
+          .insert(dataToSave)
+          .select()
+          .single();
 
         if (insertError) throw insertError;
+        if (!newClient) throw new Error("Erreur lors de la création du client");
+        clientId = newClient.id;
+      }
+
+      // Insérer les nouveaux contacts
+      if (contacts.length > 0) {
+        const contactsToInsert = contacts
+          .filter((c) => c.prenom || c.nom || c.email || c.telephone)
+          .map((c) => ({
+            client_id: clientId,
+            prenom: c.prenom || null,
+            nom: c.nom || null,
+            email: c.email || null,
+            telephone: c.telephone || null,
+          }));
+
+        if (contactsToInsert.length > 0) {
+          const { error: contactsError } = await supabase
+            .from("contacts")
+            .insert(contactsToInsert);
+
+          if (contactsError) throw contactsError;
+        }
       }
 
       onSuccess();
@@ -303,7 +391,10 @@ export function ClientModal({
     try {
       const supabase = createClient();
 
-      // Supprimer définitivement de la base de données
+      // Supprimer les contacts d'abord
+      await supabase.from("contacts").delete().eq("client_id", client.id);
+
+      // Supprimer définitivement le client
       const { error: deleteError } = await supabase
         .from("clients_pro")
         .delete()
@@ -332,9 +423,12 @@ export function ClientModal({
       return;
     }
 
-    if (formData.contact_email && !isValidEmail(formData.contact_email)) {
-      setError("L'email n'est pas au format valide");
-      return;
+    // Valider les emails des contacts
+    for (const contact of contacts) {
+      if (contact.email && !isValidEmail(contact.email)) {
+        setError(`L'email "${contact.email}" n'est pas au format valide`);
+        return;
+      }
     }
 
     // Si pas de changements, ne rien faire
@@ -443,76 +537,114 @@ export function ClientModal({
                 </div>
               </div>
 
-              {/* Section Contact */}
+              {/* Section Contacts */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-purpl-black border-b border-gray-200 pb-2">
-                  Contact
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Prénom */}
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Prénom
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.contact_prenom}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contact_prenom: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="Jean"
-                    />
-                  </div>
-
-                  {/* Nom */}
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Nom
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.contact_nom}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contact_nom: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="Dupont"
-                    />
-                  </div>
-
-                  {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.contact_email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contact_email: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="contact@exemple.fr"
-                    />
-                  </div>
-
-                  {/* Téléphone */}
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Téléphone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.contact_telephone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contact_telephone: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="01 23 45 67 89"
-                    />
-                  </div>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-purpl-black border-b border-gray-200 pb-2 flex-1">
+                    Contacts
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addContact}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-purpl-green text-white rounded-lg hover:bg-purpl-green/90 transition-colors text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Ajouter un contact
+                  </button>
                 </div>
+
+                {contacts.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    Aucun contact. Cliquez sur "Ajouter un contact" pour en créer un.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {contacts.map((contact, index) => (
+                      <div
+                        key={index}
+                        className="p-4 border-2 border-purpl-sable rounded-lg bg-gray-50"
+                      >
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-medium text-purpl-black">
+                            Contact {index + 1}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => removeContact(index)}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Prénom */}
+                          <div>
+                            <label className="block text-sm font-medium text-purpl-green mb-2">
+                              Prénom
+                            </label>
+                            <input
+                              type="text"
+                              value={contact.prenom}
+                              onChange={(e) =>
+                                updateContact(index, "prenom", e.target.value)
+                              }
+                              className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                              placeholder="Jean"
+                            />
+                          </div>
+
+                          {/* Nom */}
+                          <div>
+                            <label className="block text-sm font-medium text-purpl-green mb-2">
+                              Nom
+                            </label>
+                            <input
+                              type="text"
+                              value={contact.nom}
+                              onChange={(e) =>
+                                updateContact(index, "nom", e.target.value)
+                              }
+                              className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                              placeholder="Dupont"
+                            />
+                          </div>
+
+                          {/* Email */}
+                          <div>
+                            <label className="block text-sm font-medium text-purpl-green mb-2">
+                              Email
+                            </label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={(e) =>
+                                updateContact(index, "email", e.target.value)
+                              }
+                              className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                              placeholder="contact@exemple.fr"
+                            />
+                          </div>
+
+                          {/* Téléphone */}
+                          <div>
+                            <label className="block text-sm font-medium text-purpl-green mb-2">
+                              Téléphone
+                            </label>
+                            <input
+                              type="tel"
+                              value={contact.telephone}
+                              onChange={(e) =>
+                                updateContact(index, "telephone", e.target.value)
+                              }
+                              className="w-full px-4 py-2 border-2 border-purpl-sable rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                              placeholder="01 23 45 67 89"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Section Adresse */}

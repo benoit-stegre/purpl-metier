@@ -37,6 +37,15 @@ interface Client {
   } | null;
 }
 
+interface Contact {
+  id: string;
+  client_id: string;
+  prenom: string | null;
+  nom: string | null;
+  email: string | null;
+  telephone: string | null;
+}
+
 interface ClientsGridProps {
   initialClients: Client[];
 }
@@ -56,10 +65,13 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [categories, setCategories] = useState<any[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [contactsByClient, setContactsByClient] = useState<Record<string, Contact[]>>({});
 
   const handleSuccess = () => {
     router.refresh();
     setEditingClient(null);
+    // Recharger les contacts après modification
+    loadAllContacts();
   };
 
   const handleEdit = (client: Client) => {
@@ -71,7 +83,6 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
     setIsModalOpen(false);
     setEditingClient(null);
   };
-
 
   const handleNewClient = useCallback(() => {
     setEditingClient(null);
@@ -99,6 +110,7 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
   // Fetch catégories pour les filtres
   useEffect(() => {
     fetchCategories();
+    loadAllContacts();
   }, []);
 
   const fetchCategories = async () => {
@@ -111,10 +123,35 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
 
       if (data) {
         setCategories(data);
-        router.refresh();
       }
     } catch (error) {
       console.error("Erreur fetch catégories:", error);
+    }
+  };
+
+  const loadAllContacts = async () => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("*")
+        .order("created_at");
+
+      if (error) throw error;
+
+      if (data) {
+        // Grouper les contacts par client_id
+        const grouped: Record<string, Contact[]> = {};
+        data.forEach((contact) => {
+          if (!grouped[contact.client_id]) {
+            grouped[contact.client_id] = [];
+          }
+          grouped[contact.client_id].push(contact);
+        });
+        setContactsByClient(grouped);
+      }
+    } catch (error) {
+      console.error("Erreur fetch contacts:", error);
     }
   };
 
@@ -132,7 +169,14 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
         (client.siret &&
           client.siret.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (client.contact_nom &&
-          client.contact_nom.toLowerCase().includes(searchTerm.toLowerCase()));
+          client.contact_nom.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        // Recherche dans les contacts
+        (contactsByClient[client.id]?.some((contact) =>
+          (contact.prenom || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (contact.nom || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (contact.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (contact.telephone || "").toLowerCase().includes(searchTerm.toLowerCase())
+        ));
 
       // Filtre catégorie
       const matchesCategory =
@@ -141,7 +185,11 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
 
       return matchesSearch && matchesCategory;
     });
-  }, [initialClients, searchTerm, selectedCategory]);
+  }, [initialClients, searchTerm, selectedCategory, contactsByClient]);
+
+  const getClientContacts = (clientId: string): Contact[] => {
+    return contactsByClient[clientId] || [];
+  };
 
   return (
     <>
@@ -196,68 +244,98 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
 
       {/* Grille de clients */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredClients.map((client) => (
-          <div
-            key={client.id}
-            onClick={() => handleEdit(client)}
-            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
-          >
-            {/* Icône utilisateur */}
-            <div className="mb-3">
-              <div className="w-12 h-12 bg-purpl-green/10 rounded-full flex items-center justify-center">
-                <UserIcon className="w-6 h-6 text-purpl-green" />
+        {filteredClients.map((client) => {
+          const contacts = getClientContacts(client.id);
+          const primaryContact = contacts.length > 0 ? contacts[0] : null;
+
+          return (
+            <div
+              key={client.id}
+              onClick={() => handleEdit(client)}
+              className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              {/* Icône utilisateur */}
+              <div className="mb-3">
+                <div className="w-12 h-12 bg-purpl-green/10 rounded-full flex items-center justify-center">
+                  <UserIcon className="w-6 h-6 text-purpl-green" />
+                </div>
               </div>
-            </div>
 
-            {/* Raison sociale */}
-            <h3 className="font-semibold text-gray-900 mb-1">{client.raison_sociale}</h3>
+              {/* Raison sociale */}
+              <h3 className="font-semibold text-gray-900 mb-1">{client.raison_sociale}</h3>
 
-            {/* Badge catégorie */}
-            {client.categories_clients && (
-              <div className="mt-2">
-                <span
-                  className="inline-flex items-center px-2 py-1 text-xs font-medium rounded"
-                  style={{
-                    backgroundColor: `${client.categories_clients.color || "#76715A"}15`,
-                    color: client.categories_clients.color || "#76715A",
-                    border: `1px solid ${client.categories_clients.color || "#76715A"}30`,
-                  }}
-                >
-                  {client.categories_clients.name}
+              {/* Badge catégorie */}
+              {client.categories_clients && (
+                <div className="mt-2">
+                  <span
+                    className="inline-flex items-center px-2 py-1 text-xs font-medium rounded"
+                    style={{
+                      backgroundColor: `${client.categories_clients.color || "#76715A"}15`,
+                      color: client.categories_clients.color || "#76715A",
+                      border: `1px solid ${client.categories_clients.color || "#76715A"}30`,
+                    }}
+                  >
+                    {client.categories_clients.name}
+                  </span>
+                </div>
+              )}
+
+              {/* Contact principal */}
+              {primaryContact && (
+                <div className="mt-2 space-y-1">
+                  {(primaryContact.prenom || primaryContact.nom) && (
+                    <p className="text-sm text-gray-600">
+                      {[primaryContact.prenom, primaryContact.nom].filter(Boolean).join(" ")}
+                    </p>
+                  )}
+                  {primaryContact.email && (
+                    <p className="text-sm text-gray-600 truncate">
+                      {primaryContact.email}
+                    </p>
+                  )}
+                  {primaryContact.telephone && (
+                    <p className="text-sm text-gray-500">
+                      {primaryContact.telephone}
+                    </p>
+                  )}
+                  {contacts.length > 1 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      +{contacts.length - 1} autre{contacts.length > 2 ? "s" : ""} contact{contacts.length > 2 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Fallback sur anciens champs si pas de contacts */}
+              {!primaryContact && (client.contact_prenom || client.contact_nom) && (
+                <p className="text-sm text-gray-600 mt-2">
+                  {[client.contact_prenom, client.contact_nom].filter(Boolean).join(" ")}
+                </p>
+              )}
+
+              {!primaryContact && client.contact_email && (
+                <p className="text-sm text-gray-600 truncate mb-2">
+                  {client.contact_email}
+                </p>
+              )}
+
+              {/* Localisation */}
+              {(client.ville || client.pays) && (
+                <p className="text-sm text-gray-500 mb-1">
+                  {client.ville && `${client.ville}, `}
+                  {client.pays}
+                </p>
+              )}
+
+              {/* Date */}
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                <span className="text-xs text-gray-400">
+                  {client.created_at && new Date(client.created_at).toLocaleDateString("fr-FR")}
                 </span>
               </div>
-            )}
-
-            {/* Contact */}
-            {(client.contact_prenom || client.contact_nom) && (
-              <p className="text-sm text-gray-600 mt-2">
-                {[client.contact_prenom, client.contact_nom].filter(Boolean).join(" ")}
-              </p>
-            )}
-
-            {/* Localisation */}
-            {(client.ville || client.pays) && (
-              <p className="text-sm text-gray-500 mb-1">
-                {client.ville && `${client.ville}, `}
-                {client.pays}
-              </p>
-            )}
-
-            {/* Email */}
-            {client.contact_email && (
-              <p className="text-sm text-gray-600 truncate mb-2">
-                {client.contact_email}
-              </p>
-            )}
-
-            {/* Date */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-              <span className="text-xs text-gray-400">
-                {client.created_at && new Date(client.created_at).toLocaleDateString("fr-FR")}
-              </span>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Message si aucun résultat */}
