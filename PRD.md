@@ -1,6 +1,6 @@
 # PRD - PURPL MÉTIER
 
-> **Version:** 1.1 | **Date:** 2025-12-25
+> **Version:** 1.2 | **Date:** 2025-01-20
 > **Chemin:** `C:\Users\ben\Documents\#Benoit\PURPL_METIER\purpl-metier`
 
 ---
@@ -22,13 +22,17 @@ Application interne de gestion pour PURPL Solutions (mobilier urbain personnalis
 
 | Technologie | Version | Rôle |
 |-------------|---------|------|
-| Next.js | 14.x | Framework React, App Router |
-| React | 18.x | Interface utilisateur |
+| Next.js | 16.1.0 | Framework React, App Router |
+| React | 19.2.3 | Interface utilisateur |
 | TypeScript | 5.x | Typage statique |
-| Tailwind CSS | 3.x | Styling utility-first |
+| Tailwind CSS | 3.4.x | Styling utility-first |
 | Supabase | Latest | BDD PostgreSQL + Auth + Storage |
 | Lucide React | Latest | Icônes |
-| xlsx (SheetJS) | Latest | Export Excel |
+| xlsx (SheetJS) | 0.18.5 | Export Excel |
+| @dnd-kit | 6.3.1 | Drag & drop (Kanban) |
+| react-hot-toast | 2.6.0 | Notifications toast |
+| date-fns | 4.1.0 | Manipulation dates |
+| uuid | 13.0.0 | Génération UUID |
 
 ---
 
@@ -37,17 +41,22 @@ Application interne de gestion pour PURPL Solutions (mobilier urbain personnalis
 ```
 purpl-metier/
 ├── app/
-│   ├── (auth)/login/page.tsx
+│   ├── (auth)/
+│   │   └── login/page.tsx
 │   ├── (dashboard)/
 │   │   ├── layout.tsx              # Header navigation
-│   │   ├── dashboard/page.tsx
+│   │   ├── dashboard/page.tsx       # Page d'accueil avec statistiques
 │   │   ├── composants/page.tsx
 │   │   ├── produits/page.tsx
 │   │   ├── clients/page.tsx
 │   │   ├── projets/page.tsx
-│   │   └── categories/page.tsx
+│   │   └── categories/page.tsx      # Gestionnaire de catégories
 │   └── api/
+│       └── admin/                   # Routes API admin
 ├── components/
+│   ├── auth/
+│   │   ├── UserInfo.tsx
+│   │   └── LogoutButton.tsx
 │   ├── categories/
 │   │   ├── CategoriesManager.tsx
 │   │   ├── CategoryManagerModal.tsx
@@ -56,17 +65,24 @@ purpl-metier/
 │   │   ├── ClientsGrid.tsx
 │   │   └── ClientModal.tsx
 │   ├── composants/
+│   │   ├── ComposantsView.tsx       # Vue principale (Grid/Kanban)
 │   │   ├── ComposantsGrid.tsx
+│   │   ├── ComposantsKanban.tsx
 │   │   ├── ComposantCard.tsx
 │   │   └── ComposantModal.tsx
 │   ├── produits/
+│   │   ├── ProduitsView.tsx         # Vue principale (Grid/Kanban)
 │   │   ├── ProduitsGrid.tsx
+│   │   ├── ProduitsKanban.tsx
 │   │   ├── ProduitCard.tsx
 │   │   └── ProduitModal.tsx
 │   ├── projets/
 │   │   ├── ProjetsKanban.tsx
+│   │   ├── ProjetsGrid.tsx
 │   │   ├── ProjetCard.tsx
-│   │   └── ProjetModal.tsx
+│   │   ├── ProjetModal.tsx
+│   │   ├── ExportCommandeModal.tsx  # Modal sélection catégories
+│   │   └── KanbanColumnHeader.tsx
 │   ├── navigation/
 │   │   └── NavLink.tsx
 │   └── ui/
@@ -74,12 +90,15 @@ purpl-metier/
 ├── lib/
 │   ├── constants/colors.ts
 │   ├── exports/
-│   │   ├── projetExports.ts
-│   │   └── bonCommandeExports.ts
+│   │   └── projetExports.ts         # Export devis + bon de commande
 │   ├── supabase/
-│   │   ├── client.ts
-│   │   └── server.ts
-│   └── utils/cn.ts
+│   │   ├── client.ts                # Client browser
+│   │   ├── server.ts                # Client server
+│   │   └── admin.ts                 # Client admin
+│   └── utils/
+│       ├── cn.ts                    # Utility Tailwind merge
+│       ├── recalculCascade.ts       # Recalcul en cascade
+│       └── projetPricing.ts         # Gestion prix figés
 ├── types/
 │   └── database.types.ts
 └── public/
@@ -122,9 +141,11 @@ CREATE TABLE produits (
   photo_url TEXT,
   categorie_id UUID REFERENCES categories_produits(id),
   description TEXT,
-  prix_heure NUMERIC DEFAULT 45,
-  nombre_heures NUMERIC,
-  prix_vente_total NUMERIC,         -- CALCULÉ
+  tarif_horaire NUMERIC DEFAULT 45,  -- €/heure
+  heures_travail NUMERIC,            -- Nombre d'heures
+  cout_composants NUMERIC,           -- CALCULÉ (somme composants)
+  cout_main_oeuvre NUMERIC,          -- CALCULÉ (tarif × heures)
+  prix_vente_total NUMERIC,          -- CALCULÉ (composants + main d'œuvre)
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
@@ -229,9 +250,12 @@ prix_vente = prix_achat * (1 + marge_pourcent / 100)
 
 ### Prix de vente produit
 ```typescript
-const sousTotal = composants.reduce((sum, c) => sum + c.prix_vente * c.quantite, 0)
-const mainOeuvre = prix_heure * nombre_heures
-prix_vente_total = sousTotal + mainOeuvre
+const coutComposants = composants.reduce((sum, c) => {
+  const prixVenteComposant = c.prix_achat * (1 + c.marge_pourcent / 100)
+  return sum + prixVenteComposant * c.quantite
+}, 0)
+const coutMainOeuvre = tarif_horaire * heures_travail
+prix_vente_total = cout_composants + cout_main_oeuvre
 ```
 
 ### Total projet
@@ -262,6 +286,13 @@ total_ht = produits.reduce((sum, p) => sum + p.prix_vente_total * p.quantite, 0)
 ---
 
 ## 7. MODULES FONCTIONNELS
+
+### 7.0 Module Dashboard
+
+**Page d'accueil avec statistiques:**
+- Cards affichant le nombre de composants, produits, clients, projets
+- Liens cliquables vers chaque module
+- Design cohérent avec le reste de l'application
 
 ### 7.1 Module Composants
 
@@ -305,7 +336,18 @@ total_ht = produits.reduce((sum, p) => sum + p.prix_vente_total * p.quantite, 0)
 - Catégorie
 - Notes
 
-### 7.4 Module Projets
+### 7.4 Module Catégories
+
+**Page dédiée:** `/categories`
+
+**Gestionnaire unifié avec onglets:**
+- Onglets: Composants | Produits | Clients | Projets
+- Grille de catégories avec pastille couleur
+- Actions: Créer, Modifier, Supprimer
+- Modal CategoryModal pour création/édition
+- Support des couleurs personnalisées par catégorie
+
+### 7.5 Module Projets
 
 **Vue par défaut: KANBAN**
 
@@ -334,17 +376,28 @@ Colonnes par statut: BROUILLON | EN COURS | TERMINÉ | ANNULÉ
 
 ## 8. EXPORTS EXCEL
 
+**Fichier:** `lib/exports/projetExports.ts` contient les deux fonctions d'export.
+
 ### 8.1 Export Devis projet
 
-**Fichier:** `Projet_[NomProjet]_[Date].xlsx`
+**Fonction:** `exportProjetDevis(projetId: string)`
 
-- Feuille 1: Informations projet
-- Feuille 2: Détail produits (produit, ref, qté, prix unit, total)
-- Feuille 3: Détail composants (optionnel)
+**Fichier généré:** `Devis_[Reference]_[Date].xlsx`
+
+**Contenu:**
+- **Onglet "Informations":** Nom, référence, client, statut, dates, budget
+- **Onglet "Produits":** Tableau avec référence, nom, quantité, prix unitaire HT, total HT
+  - Ligne total HT en bas
+  - Formatage prix avec 2 décimales
+  - Styles PURPL (couleurs header, bordures)
 
 ### 8.2 Export Bon de commande par catégorie
 
-**Fichier:** `BonCommande_[NomProjet]_[Date].xlsx`
+**Fonction:** `exportProjetCommande(projetId: string, categoryIds?: string[])`
+
+**Fichier généré:** `Commande_[Reference]_[Date].xlsx`
+
+**Modal ExportCommandeModal:**
 
 **Modal de sélection:**
 ```
@@ -378,9 +431,45 @@ CATÉGORIE : Quincaillerie
 - Catégories individuelles cochées → Exporte uniquement celles-ci
 - Quantités agrégées si même composant dans plusieurs produits
 
+**Contenu fichier:**
+- **Un onglet par catégorie** (nom de l'onglet = nom catégorie, max 31 caractères)
+- Colonnes: Référence | Nom | Quantité totale nécessaire | Unité
+- Quantités calculées: `quantite_projet × quantite_produit × quantite_composant`
+- Si aucune catégorie: onglet "Aucun composant"
+
 ---
 
-## 9. DESIGN SYSTEM
+## 9. UTILITAIRES
+
+### 9.1 Recalcul en cascade
+
+**Fichier:** `lib/utils/recalculCascade.ts`
+
+**Fonctions:**
+- `cascadeDepuisComposant(composantId)` : Recalcule produits → projets brouillon
+- `recalculerProjetsBrouillonPourProduit(produitId)` : Recalcule projets brouillon uniquement
+
+**Comportement:**
+- Seuls les projets en statut "brouillon" sont recalculés
+- Les projets avec prix figés ne sont pas modifiés
+
+### 9.2 Gestion prix figés
+
+**Fichier:** `lib/utils/projetPricing.ts`
+
+**Fonctions:**
+- `figerPrixProduits(projetId)` : Fige les prix quand projet passe de brouillon → autre statut
+- `defigerPrixProduits(projetId)` : Défige les prix quand projet repasse en brouillon
+- `gererChangementStatut(projetId, ancienStatut, nouveauStatut)` : Gère automatiquement le figement/défigement
+
+**Logique:**
+- `prix_unitaire_fige` dans `projets_produits` stocke le prix historique
+- Si `prix_unitaire_fige` est NULL → utilise `prix_vente_total` du produit (dynamique)
+- Si `prix_unitaire_fige` est défini → utilise cette valeur (figé)
+
+---
+
+## 10. DESIGN SYSTEM
 
 ### Couleurs PURPL
 
@@ -411,7 +500,7 @@ const colors = {
 
 ---
 
-## 10. CONVENTIONS CODE
+## 11. CONVENTIONS CODE
 
 ### Nommage
 
@@ -458,19 +547,19 @@ try {
 
 ---
 
-## 11. VALEURS PAR DÉFAUT
+## 12. VALEURS PAR DÉFAUT
 
 | Paramètre | Valeur | Modifiable |
 |-----------|--------|------------|
 | Marge composant | 30% | Par composant |
-| Prix horaire | 45€ | Global ou par produit |
+| Tarif horaire | 45€ | Par produit |
 | Pays | France | Oui |
 | Statut projet | brouillon | Oui |
 | is_active | true | Oui |
 
 ---
 
-## 12. SUPABASE
+## 13. SUPABASE
 
 - **Project ID:** `anodesfypwifqxpsqmpt`
 - **Région:** West EU (Paris)
@@ -488,6 +577,7 @@ npx supabase gen types typescript --project-id anodesfypwifqxpsqmpt > types/data
 |---------|------|---------------|
 | 1.0 | 2025-12-25 | Création initiale |
 | 1.1 | 2025-12-25 | Picto poids, raison sociale seul obligatoire, Kanban par défaut + bouton cercle, règle prix figés, export bon de commande |
+| 1.2 | 2025-01-20 | Mise à jour stack (Next.js 16, React 19), ajout Dashboard, page Catégories dédiée, structure fichiers complète, utilitaires recalcul/prix figés, détails exports Excel |
 
 
 

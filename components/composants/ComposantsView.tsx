@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, Columns3 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ComposantsKanban } from "./ComposantsKanban";
 import { ComposantCard } from "./ComposantCard";
 import { ComposantModal } from "./ComposantModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
-import { PlusIcon, SearchIcon } from "@/components/ui/Icons";
+import { SearchIcon } from "@/components/ui/Icons";
+import { usePageHeader } from "@/contexts/PageHeaderContext";
 import type { Database } from "@/types/database.types";
 
 type Composant = Database["public"]["Tables"]["composants"]["Row"] & {
@@ -29,7 +29,14 @@ export function ComposantsView({
   categories,
 }: ComposantsViewProps) {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const {
+    setPageTitle,
+    viewMode,
+    setViewMode,
+    setShowNewButton,
+    setNewButtonLabel,
+    setOnNewClick,
+  } = usePageHeader();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingComposant, setEditingComposant] = useState<Composant | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,6 +45,29 @@ export function ComposantsView({
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [localCategories, setLocalCategories] = useState(categories);
   const [localComposants, setLocalComposants] = useState<Composant[]>(initialComposants);
+
+  const handleNewComposant = useCallback(() => {
+    setEditingComposant(null);
+    setIsModalOpen(true);
+  }, []);
+
+  // Configuration du header via le Context
+  useEffect(() => {
+    setPageTitle("Composants");
+    setViewMode("kanban");
+    setShowNewButton(true);
+    setNewButtonLabel("Nouveau");
+    setOnNewClick(() => handleNewComposant);
+
+    // Cleanup : réinitialiser le header quand on quitte la page
+    return () => {
+      setPageTitle("");
+      setViewMode(null);
+      setShowNewButton(false);
+      setNewButtonLabel("Nouveau");
+      setOnNewClick(null);
+    };
+  }, [setPageTitle, setViewMode, setShowNewButton, setNewButtonLabel, setOnNewClick, handleNewComposant]);
 
   useEffect(() => {
     setLocalCategories(categories);
@@ -100,11 +130,6 @@ export function ComposantsView({
     setEditingComposant(null);
   };
 
-  const handleNewComposant = () => {
-    setEditingComposant(null);
-    setIsModalOpen(true);
-  };
-
   // Filtrage pour la vue grille
   const filteredComposants = localComposants.filter((composant) => {
     const matchesSearch =
@@ -129,43 +154,6 @@ export function ComposantsView({
 
   return (
     <>
-      {/* Header avec titre et toggle */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: "#76715A" }}>
-          Composants
-        </h1>
-
-        <div className="flex items-center gap-3">
-          {/* Toggle vue */}
-          <div className="flex items-center bg-[#EDEAE3] rounded-lg p-1">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                viewMode === "kanban"
-                  ? "bg-white text-[#76715A] shadow-sm"
-                  : "text-gray-500 hover:text-[#76715A]"
-              }`}
-              title="Vue Kanban"
-            >
-              <Columns3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                viewMode === "grid"
-                  ? "bg-white text-[#76715A] shadow-sm"
-                  : "text-gray-500 hover:text-[#76715A]"
-              }`}
-              title="Vue Grille"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span className="hidden sm:inline">Grille</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Vue Kanban */}
       {viewMode === "kanban" ? (
         <ComposantsKanban
@@ -226,15 +214,6 @@ export function ComposantsView({
               <option value="active">Actifs uniquement</option>
               <option value="archived">Archivés uniquement</option>
             </select>
-
-            {/* Bouton nouveau */}
-            <button
-              onClick={handleNewComposant}
-              className="w-full md:w-auto bg-[#ED693A] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-[#d85a2a] transition-colors flex items-center justify-center gap-2"
-            >
-              <PlusIcon className="w-5 h-5" />
-              Nouveau
-            </button>
           </div>
 
           {/* Grille */}
