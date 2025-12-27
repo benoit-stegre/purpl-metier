@@ -143,6 +143,7 @@ export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
     budget: p.budget,
     photo_url: p.photo_url,
     categorie_id: p.categorie_id,
+    is_active: p.is_active ?? true,
     created_at: p.created_at || new Date().toISOString(),
     updated_at: p.updated_at || new Date().toISOString(),
     categories_projets: p.categories_projets,
@@ -198,6 +199,7 @@ export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
       budget: projetRaw.budget,
       photo_url: projetRaw.photo_url,
       categorie_id: projetRaw.categorie_id,
+      is_active: projetRaw.is_active ?? true,
       created_at: projetRaw.created_at || new Date().toISOString(),
       updated_at: projetRaw.updated_at || new Date().toISOString(),
     };

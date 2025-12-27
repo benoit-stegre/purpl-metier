@@ -193,6 +193,7 @@ export function ProjetModal({
         setClients(data.map(client => ({
           id: client.id,
           name: client.raison_sociale,
+          is_active: client.is_active ?? true,
         })));
       }
     } catch (error) {
@@ -206,11 +207,18 @@ export function ProjetModal({
       const supabase = createClient();
       const { data, error } = await supabase
         .from("produits")
-        .select("id, name, reference, prix_vente_total, photo_url")
+        .select("id, name, reference, prix_vente_total, photo_url, is_active")
         .order("name");
 
       if (error) throw error;
-      if (data) setAvailableProduits(data);
+      if (data) setAvailableProduits(data.map(produit => ({
+        id: produit.id,
+        name: produit.name,
+        reference: produit.reference,
+        prix_vente_total: produit.prix_vente_total,
+        photo_url: produit.photo_url,
+        is_active: produit.is_active ?? true,
+      })));
     } catch (error) {
       console.error("Erreur chargement produits:", error);
       toast.error("Erreur lors du chargement des produits");
@@ -226,9 +234,16 @@ export function ProjetModal({
       if (produits.length === 0) {
         const { data: produitsData } = await supabase
           .from("produits")
-          .select("id, name, reference, prix_vente_total, photo_url")
+          .select("id, name, reference, prix_vente_total, photo_url, is_active")
           .order("name");
-        produits = produitsData || [];
+        produits = (produitsData || []).map(produit => ({
+          id: produit.id,
+          name: produit.name,
+          reference: produit.reference,
+          prix_vente_total: produit.prix_vente_total,
+          photo_url: produit.photo_url,
+          is_active: produit.is_active ?? true,
+        }));
         setAvailableProduits(produits);
       }
       

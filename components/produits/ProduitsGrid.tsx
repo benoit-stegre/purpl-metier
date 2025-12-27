@@ -39,6 +39,12 @@ type Composant = {
   photo_url: string | null
   is_active: boolean
   poids: number | null
+  categorie_id: string | null
+  categorie: {
+    id: string
+    name: string
+    color: string | null
+  } | null
 }
 
 interface ProduitsGridProps {
