@@ -63,6 +63,9 @@ export default async function ProduitsPage() {
   const transformedComposants = (composants || []).map(comp => ({
     ...comp,
     prix_vente: comp.prix_vente ?? 0,
+    categorie: Array.isArray(comp.categorie) 
+      ? (comp.categorie.length > 0 ? comp.categorie[0] : null)
+      : (comp.categorie ?? null),
   }))
   
   return (
