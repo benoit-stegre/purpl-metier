@@ -28,6 +28,7 @@ interface Produit {
   categories_produits: {
     id: string;
     name: string;
+    slug: string;
     color: string | null;
   } | null;
 }
@@ -36,9 +37,9 @@ interface Composant {
   id: string;
   name: string;
   reference: string | null;
-  prix_vente: number | null;
+  prix_vente: number;
   photo_url: string | null;
-  is_active: boolean | null;
+  is_active: boolean;
   poids: number | null;
 }
 
@@ -123,6 +124,7 @@ export function ProduitsView({
           categories_produits (
             id,
             name,
+            slug,
             color
           )
         `)
@@ -317,7 +319,7 @@ export function ProduitsView({
               <ProduitCard
                 key={produit.id}
                 produit={produit}
-                onClick={() => handleEdit(produit)}
+                onEdit={handleEdit}
                 onDelete={async () => {
                   await fetchProduits();
                 }}

@@ -115,7 +115,7 @@ export function ComposantModal({
         prix_achat: composant.prix_achat?.toString() || "",
         marge_pourcent: composant.marge_pourcent?.toString() || "30",
         notes: composant.notes || "",
-        is_active: composant.is_active !== undefined ? composant.is_active : true,
+        is_active: composant.is_active ?? true,
       };
 
       setFormData(loadedData);

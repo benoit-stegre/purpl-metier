@@ -3,16 +3,22 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Home, Layout, Package, Users, FolderKanban, LucideIcon } from "lucide-react";
 import { NavLink } from "@/components/navigation/NavLink";
 import { UserInfo } from "@/components/auth";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/composants", label: "Composants" },
-  { href: "/produits", label: "Produits" },
-  { href: "/clients", label: "Clients" },
-  { href: "/projets", label: "Projets" },
+type NavItem = {
+  href: string;
+  label: string;
+  icon?: LucideIcon;
+};
+
+const navItems: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/composants", label: "Composants", icon: Layout },
+  { href: "/produits", label: "Produits", icon: Package },
+  { href: "/clients", label: "Clients", icon: Users },
+  { href: "/projets", label: "Projets", icon: FolderKanban },
 ];
 
 export default function DashboardLayout({

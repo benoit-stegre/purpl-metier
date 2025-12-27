@@ -18,7 +18,7 @@ interface Category {
   updated_at: string | null;
 }
 
-type CategoryType = "composants" | "produits" | "clients";
+type CategoryType = "composants" | "produits" | "clients" | "projets";
 
 interface CategoryModalProps {
   isOpen: boolean;
@@ -45,6 +45,7 @@ export function CategoryModal({
     composants: "#76715A",
     produits: "#ED693A",
     clients: "#76715A",
+    projets: "#76715A",
   };
 
   // État initial du formulaire

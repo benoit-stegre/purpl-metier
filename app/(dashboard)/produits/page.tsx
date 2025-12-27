@@ -29,6 +29,7 @@ export default async function ProduitsPage() {
       categories_produits (
         id,
         name,
+        slug,
         color
       )
     `)
@@ -45,11 +46,18 @@ export default async function ProduitsPage() {
     .eq('is_active', true)
     .order('name')
   
+  // Transformer les composants pour gérer les valeurs null
+  const transformedComposants = (composants || []).map(comp => ({
+    ...comp,
+    prix_vente: comp.prix_vente ?? 0,
+    is_active: comp.is_active ?? true,
+  }))
+  
   return (
     <div className="py-4 md:py-6 lg:py-8">
       <ProduitsView 
         initialProduits={produits || []} 
-        availableComposants={composants || []}
+        availableComposants={transformedComposants}
       />
     </div>
   )

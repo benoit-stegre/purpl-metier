@@ -20,6 +20,7 @@ type Produit = Database['public']['Tables']['produits']['Row'] & {
       reference: string | null
       prix_vente: number
       photo_url: string | null
+      poids: number | null
     } | null
   }>
   categories_produits: {

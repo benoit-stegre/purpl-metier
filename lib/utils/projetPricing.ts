@@ -28,7 +28,9 @@ export async function figerPrixProduits(projetId: string): Promise<{ success: bo
     // Mettre à jour chaque produit qui n'a pas encore de prix figé
     for (const pp of projetProduits) {
       if (pp.prix_unitaire_fige === null) {
-        const prixActuel = (pp.produit as { prix_vente_total: number | null })?.prix_vente_total ?? 0;
+        // Gérer le cas où produit peut être un objet ou un tableau
+        const produitData = Array.isArray(pp.produit) ? pp.produit[0] : pp.produit;
+        const prixActuel = (produitData as { prix_vente_total: number | null } | undefined)?.prix_vente_total ?? 0;
         
         const { error: updateError } = await supabase
           .from("projets_produits")

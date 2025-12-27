@@ -21,6 +21,7 @@ type Produit = Database['public']['Tables']['produits']['Row'] & {
   categories_produits: {
     id: string
     name: string
+    slug: string
     color: string | null
   } | null
 }

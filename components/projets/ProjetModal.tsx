@@ -265,9 +265,9 @@ export function ProjetModal({
             return {
               produit_id: produit.id,
               quantite: pp.quantite,
-              prix_unitaire_fige: pp.prix_unitaire_fige,
+              prix_unitaire_fige: pp.prix_unitaire_fige ?? null,
               produit,
-            };
+            } as SelectedProduit;
           })
           .filter((sp): sp is SelectedProduit => sp !== null);
 
