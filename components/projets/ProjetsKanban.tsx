@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -23,7 +23,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
-import { Calendar, Building2, Euro, GripVertical, Plus, X, FileText, ShoppingCart } from "lucide-react";
+import { Calendar, Building2, Euro, GripVertical, Plus, X, FileText, ShoppingCart, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import { gererChangementStatut } from "@/lib/utils/projetPricing";
 import { exportProjetDevis, exportProjetCommande } from "@/lib/exports/projetExports";
 import { KanbanColumnHeader } from "./KanbanColumnHeader";
@@ -293,6 +293,43 @@ function SortableKanbanColumn({
     id: statut.nom, // On utilise le nom pour matcher avec projets.statut
   });
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showTopArrow, setShowTopArrow] = useState(false);
+  const [showBottomArrow, setShowBottomArrow] = useState(false);
+
+  const checkScrollPosition = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    setShowTopArrow(scrollTop > 0);
+    setShowBottomArrow(scrollTop < scrollHeight - clientHeight - 10);
+  };
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    checkScrollPosition();
+    container.addEventListener("scroll", checkScrollPosition);
+    window.addEventListener("resize", checkScrollPosition);
+
+    return () => {
+      container.removeEventListener("scroll", checkScrollPosition);
+      window.removeEventListener("resize", checkScrollPosition);
+    };
+  }, [projets]);
+
+  const scrollUp = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ top: -200, behavior: "smooth" });
+    }
+  };
+
+  const scrollDown = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ top: 200, behavior: "smooth" });
+    }
+  };
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -319,11 +356,40 @@ function SortableKanbanColumn({
 
       {/* Zone droppable pour les projets */}
       <div
-        ref={setDroppableRef}
-        className={`flex-1 p-2 sm:p-3 space-y-3 overflow-y-auto min-h-[200px] max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-280px)] transition-all duration-200 ease-out ${
+        ref={(node) => {
+          setDroppableRef(node);
+          scrollContainerRef.current = node;
+        }}
+        className={`flex-1 p-2 sm:p-3 space-y-3 overflow-y-auto min-h-[200px] max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-280px)] transition-all duration-200 ease-out relative scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
           isOver ? "ring-2 ring-[#ED693A] ring-inset bg-[#EDEAE3] scale-[1.01]" : ""
         }`}
       >
+        {/* Flèche haut */}
+        {showTopArrow && (
+          <button
+            onClick={scrollUp}
+            className="absolute left-1/2 -translate-x-1/2 top-2 z-10 w-8 h-8 flex items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-100"
+            style={{ backgroundColor: "rgba(243, 209, 182, 0.75)" }}
+            aria-label="Défiler vers le haut"
+            type="button"
+          >
+            <ChevronUp className="w-5 h-5" style={{ color: "#76715A" }} />
+          </button>
+        )}
+
+        {/* Flèche bas */}
+        {showBottomArrow && (
+          <button
+            onClick={scrollDown}
+            className="absolute left-1/2 -translate-x-1/2 bottom-2 z-10 w-8 h-8 flex items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-100"
+            style={{ backgroundColor: "rgba(243, 209, 182, 0.75)" }}
+            aria-label="Défiler vers le bas"
+            type="button"
+          >
+            <ChevronDown className="w-5 h-5" style={{ color: "#76715A" }} />
+          </button>
+        )}
+
         <SortableContext
           items={projets.map((p) => p.id)}
           strategy={verticalListSortingStrategy}
@@ -481,6 +547,10 @@ export function ProjetsKanban({
   const [isLoadingColumns, setIsLoadingColumns] = useState(true);
   const [showNewStatusModal, setShowNewStatusModal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
+  const [shouldCenter, setShouldCenter] = useState(true);
 
   const supabase = createClient();
 
@@ -898,6 +968,42 @@ export function ProjetsKanban({
     }
   };
 
+  // Gestion du scroll et des flèches
+  const checkScrollPosition = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+    setShowLeftArrow(scrollLeft > 0);
+    setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 10);
+    // Centrer seulement si le contenu ne dépasse pas la largeur
+    setShouldCenter(scrollWidth <= clientWidth);
+  };
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !isMounted) return;
+
+    checkScrollPosition();
+    container.addEventListener("scroll", checkScrollPosition);
+    window.addEventListener("resize", checkScrollPosition);
+
+    return () => {
+      container.removeEventListener("scroll", checkScrollPosition);
+      window.removeEventListener("resize", checkScrollPosition);
+    };
+  }, [columns, isMounted]);
+
+  const scrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -300, behavior: "smooth" });
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 300, behavior: "smooth" });
+    }
+  };
+
   // Afficher un loader pendant l'hydratation ou le chargement
   if (!isMounted || isLoadingColumns) {
     return (
@@ -924,18 +1030,29 @@ export function ProjetsKanban({
 
   return (
     <div className={`relative ${isUpdating ? "opacity-70 pointer-events-none" : ""}`}>
-      {/* Header avec bouton Nouveau projet */}
-      <div className="flex justify-end mb-4">
-        {onNewProjet && (
-          <button
-            onClick={onNewProjet}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-[#ED693A] text-white rounded-lg hover:bg-[#d85a2a] transition-colors font-medium shadow-md"
-          >
-            <Plus className="w-5 h-5" />
-            Nouveau projet
-          </button>
-        )}
-      </div>
+      {/* Flèche gauche */}
+      {showLeftArrow && (
+        <button
+          onClick={scrollLeft}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-100"
+          style={{ backgroundColor: "rgba(243, 209, 182, 0.75)" }}
+          aria-label="Défiler vers la gauche"
+        >
+          <ChevronLeft className="w-6 h-6" style={{ color: "#76715A" }} />
+        </button>
+      )}
+
+      {/* Flèche droite */}
+      {showRightArrow && (
+        <button
+          onClick={scrollRight}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-100"
+          style={{ backgroundColor: "rgba(243, 209, 182, 0.75)" }}
+          aria-label="Défiler vers la droite"
+        >
+          <ChevronRight className="w-6 h-6" style={{ color: "#76715A" }} />
+        </button>
+      )}
 
       <DndContext
         sensors={sensors}
@@ -948,7 +1065,10 @@ export function ProjetsKanban({
           items={columns.map((c) => `column-${c.id}`)}
           strategy={horizontalListSortingStrategy}
         >
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 items-start">
+          <div
+            ref={scrollContainerRef}
+            className={`flex gap-3 sm:gap-4 overflow-x-auto pb-4 items-start scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${shouldCenter ? 'justify-center' : 'justify-start'}`}
+          >
             {columns.map((statut) => (
               <SortableKanbanColumn
                 key={statut.id}

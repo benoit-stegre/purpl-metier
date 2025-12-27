@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
-import { PlusIcon, SearchIcon } from '@/components/ui/Icons'
+import { SearchIcon } from '@/components/ui/Icons'
 import { ProduitModal } from './ProduitModal'
 import { ProduitCard } from './ProduitCard'
 import CategoryManagerModal from '@/components/categories/CategoryManagerModal'
@@ -53,7 +53,6 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
   
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('active')
   const [categories, setCategories] = useState<any[]>([])
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -100,17 +99,9 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
       const matchesCategory = selectedCategory === 'all' || 
         produit.categories_produits?.id === selectedCategory
       
-      // Filtre statut
-      let matchesStatus = true
-      if (statusFilter === 'active') {
-        matchesStatus = produit.is_active === true
-      } else if (statusFilter === 'archived') {
-        matchesStatus = produit.is_active === false
-      }
-      
-      return matchesSearch && matchesCategory && matchesStatus
+      return matchesSearch && matchesCategory
     })
-  }, [initialProduits, searchTerm, selectedCategory, statusFilter])
+  }, [initialProduits, searchTerm, selectedCategory])
 
   const handleSuccess = () => {
     router.refresh()
@@ -133,13 +124,14 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
       const supabase = createClient()
       const { error } = await supabase
         .from('produits')
-        .update({ is_active: false }) // Soft delete
+        .delete()
         .eq('id', deleteConfirm.produitId)
 
       if (error) throw error
 
       router.refresh()
       setDeleteConfirm({ open: false, produitId: null, produitName: '' })
+      toast.success('Produit supprimé définitivement')
     } catch (error) {
       console.error('Erreur suppression:', error)
       toast.error('Erreur lors de la suppression')
@@ -157,20 +149,6 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
   return (
     <>
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-semibold text-purpl-black">Produits</h1>
-        <button 
-          onClick={() => {
-            setEditingProduit(null)
-            setIsModalOpen(true)
-          }}
-          className="bg-purpl-orange text-white px-6 py-3 rounded-lg font-medium hover:bg-purpl-orange/90 transition-colors flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nouveau produit
-        </button>
-      </div>
-      
       {/* Filtres */}
       <div className="flex gap-4 mb-8 flex-wrap">
         {/* Barre de recherche */}
@@ -222,16 +200,6 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
           </option>
         </select>
 
-        {/* Dropdown statut */}
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purpl-green bg-white cursor-pointer"
-        >
-          <option value="all">Tous les produits</option>
-          <option value="active">Actifs uniquement</option>
-          <option value="archived">Archivés uniquement</option>
-        </select>
       </div>
 
       {/* Compteur résultats */}
@@ -290,11 +258,13 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-purpl-black mb-4">
-              Confirmer la suppression
+              ⚠️ Attention : Suppression définitive
             </h3>
             <p className="text-purpl-green mb-6">
-              Êtes-vous sûr de vouloir supprimer le produit{' '}
+              Êtes-vous sûr de vouloir supprimer définitivement le produit{' '}
               <strong className="text-purpl-black">{deleteConfirm.produitName}</strong> ?
+              <br />
+              <span className="text-red-600 font-semibold">Cette action est irréversible.</span>
             </p>
             <div className="flex gap-3 justify-end">
               <button

@@ -61,7 +61,6 @@ export function ComposantModal({
     prix_achat: "",
     marge_pourcent: "30",
     notes: "",
-    is_active: true,
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -115,7 +114,6 @@ export function ComposantModal({
         prix_achat: composant.prix_achat?.toString() || "",
         marge_pourcent: composant.marge_pourcent?.toString() || "30",
         notes: composant.notes || "",
-        is_active: composant.is_active ?? true,
       };
 
       setFormData(loadedData);
@@ -185,8 +183,7 @@ export function ComposantModal({
       formData.profondeur !== originalData.profondeur ||
       formData.prix_achat !== originalData.prix_achat ||
       formData.marge_pourcent !== originalData.marge_pourcent ||
-      formData.notes !== originalData.notes ||
-      formData.is_active !== originalData.is_active;
+      formData.notes !== originalData.notes;
 
     return formChanged;
   };
@@ -297,7 +294,6 @@ export function ComposantModal({
         prix_achat: parseFloat(formData.prix_achat),
         marge_pourcent: parseFloat(formData.marge_pourcent),
         notes: formData.notes || null,
-        is_active: formData.is_active,
       };
 
       if (isEditMode && editingComposantId) {
@@ -688,51 +684,21 @@ export function ComposantModal({
                 />
               </div>
 
-              {/* Archivage - Uniquement en mode édition */}
+              {/* Bouton Supprimer définitivement - Uniquement en mode édition */}
               {isEditMode && (
-                <div className="pt-4 border-t border-purpl-ecru">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={!formData.is_active}
-                      onChange={(e) =>
-                        setFormData({ ...formData, is_active: !e.target.checked })
-                      }
-                      className="w-5 h-5 rounded border-2 border-purpl-ecru text-purpl-orange focus:ring-purpl-orange cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-purpl-black group-hover:text-purpl-orange transition-colors">
-                        Archiver ce composant
-                      </span>
-                      <p className="text-xs text-purpl-green mt-1">
-                        Le composant n'apparaîtra plus dans les listes actives mais restera disponible dans l'historique
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              )}
-
-              {/* Bouton Supprimer définitivement - Uniquement si archivé */}
-              {isEditMode && !formData.is_active && (
                 <div className="pt-4 border-t border-red-200">
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-sm text-red-800 mb-3 font-medium flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      Ce composant est archivé
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      disabled={isLoading}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
-                    >
-                      <DeleteIcon className="w-4 h-4" />
-                      Supprimer définitivement
-                    </button>
-                    <p className="text-xs text-red-600 mt-2">
-                      Cette action est irréversible. Le composant sera supprimé de manière permanente.
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                  >
+                    <DeleteIcon className="w-4 h-4" />
+                    Supprimer définitivement
+                  </button>
+                  <p className="text-xs text-red-600 mt-2">
+                    Cette action est irréversible. Le composant sera supprimé de manière permanente.
+                  </p>
                 </div>
               )}
 
@@ -832,13 +798,13 @@ export function ComposantModal({
           <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
             <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5" />
-              Suppression définitive
+              ⚠️ Attention : Suppression définitive
             </h3>
             <p className="text-gray-700 mb-2">
               Êtes-vous sûr de vouloir supprimer définitivement ce composant ?
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Cette action est <strong>irréversible</strong>. Toutes les données associées seront perdues.
+              <span className="text-red-600 font-semibold">Cette action est irréversible.</span> Toutes les données associées seront perdues.
             </p>
 
             <div className="flex flex-col gap-3">

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
-import { PlusIcon, SearchIcon } from "@/components/ui/Icons";
+import { SearchIcon } from "@/components/ui/Icons";
 import { ComposantCard } from "./ComposantCard";
 import { ComposantModal } from "./ComposantModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
@@ -30,7 +30,6 @@ export function ComposantsGrid({
   const [editingComposant, setEditingComposant] = useState<Composant | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [localCategories, setLocalCategories] = useState(categories);
   // ✅ State local pour les composants - permet le rechargement après sauvegarde
@@ -116,14 +115,14 @@ export function ComposantsGrid({
       const supabase = createClient();
       const { error } = await supabase
         .from("composants")
-        .update({ is_active: false }) // Soft delete
+        .delete()
         .eq("id", deleteConfirm.composantId);
 
       if (error) throw error;
 
       await fetchComposants(); // ✅ Recharge les données depuis Supabase
       setDeleteConfirm({ open: false, composantId: null, composantName: "" });
-      toast.success("Composant supprimé");
+      toast.success("Composant supprimé définitivement");
     } catch (error) {
       console.error("Erreur suppression:", error);
       toast.error("Erreur lors de la suppression");
@@ -152,36 +151,15 @@ export function ComposantsGrid({
       const matchesCategory =
         selectedCategory === "all" || composant.categorie?.id === selectedCategory;
 
-      // Filtre statut
+      // Filtre statut (retiré - plus d'archivage)
       let matchesStatus = true;
-      if (statusFilter === "active") {
-        matchesStatus = composant.is_active === true;
-      } else if (statusFilter === "archived") {
-        matchesStatus = composant.is_active === false;
-      }
-      // Si 'all', matchesStatus reste true
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesCategory;
     });
-  }, [localComposants, searchTerm, selectedCategory, statusFilter]);
+  }, [localComposants, searchTerm, selectedCategory]);
 
   return (
     <>
-      {/* Header avec titre et bouton */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-semibold text-gray-900">Composants</h1>
-        <button
-          onClick={() => {
-            setEditingComposant(null);
-            setIsModalOpen(true);
-          }}
-          className="bg-purpl-orange text-white px-6 py-3 rounded-lg font-medium hover:bg-purpl-orange/90 transition-colors flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nouveau composant
-        </button>
-      </div>
-
       {/* Filtres */}
       <div className="flex gap-4 mb-8 flex-wrap">
         {/* Barre de recherche */}
@@ -233,16 +211,6 @@ export function ComposantsGrid({
           </option>
         </select>
 
-        {/* Dropdown statut */}
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purpl-green bg-white cursor-pointer"
-        >
-          <option value="all">Tous les composants</option>
-          <option value="active">Actifs uniquement</option>
-          <option value="archived">Archivés uniquement</option>
-        </select>
       </div>
 
       {/* Grille de composants */}
@@ -295,11 +263,13 @@ export function ComposantsGrid({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-purpl-black mb-4">
-              Confirmer la suppression
+              ⚠️ Attention : Suppression définitive
             </h3>
             <p className="text-purpl-green mb-6">
-              Êtes-vous sûr de vouloir supprimer le composant{" "}
+              Êtes-vous sûr de vouloir supprimer définitivement le composant{" "}
               <strong className="text-purpl-black">{deleteConfirm.composantName}</strong> ?
+              <br />
+              <span className="text-red-600 font-semibold">Cette action est irréversible.</span>
             </p>
             <div className="flex gap-3 justify-end">
               <button

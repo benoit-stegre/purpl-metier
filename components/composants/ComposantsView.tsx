@@ -41,7 +41,6 @@ export function ComposantsView({
   const [editingComposant, setEditingComposant] = useState<Composant | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [localCategories, setLocalCategories] = useState(categories);
   const [localComposants, setLocalComposants] = useState<Composant[]>(initialComposants);
@@ -142,14 +141,7 @@ export function ComposantsView({
       selectedCategory === "all" ||
       composant.categorie_id === selectedCategory;
 
-    let matchesStatus = true;
-    if (statusFilter === "active") {
-      matchesStatus = composant.is_active === true;
-    } else if (statusFilter === "archived") {
-      matchesStatus = composant.is_active === false;
-    }
-
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory;
   });
 
   return (
@@ -166,7 +158,7 @@ export function ComposantsView({
         /* Vue Grille */
         <>
           {/* Filtres */}
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4 mb-1.5">
             {/* Barre de recherche */}
             <div className="w-full md:flex-1 relative">
               <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -204,16 +196,6 @@ export function ComposantsView({
               </option>
             </select>
 
-            {/* Dropdown statut */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white cursor-pointer"
-            >
-              <option value="all">Tous</option>
-              <option value="active">Actifs uniquement</option>
-              <option value="archived">Archivés uniquement</option>
-            </select>
           </div>
 
           {/* Grille */}

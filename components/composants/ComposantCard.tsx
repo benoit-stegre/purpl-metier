@@ -37,9 +37,7 @@ export function ComposantCard({ composant, onEdit, onDelete }: ComposantCardProp
   return (
     <div
       onClick={handleCardClick}
-      className={`bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer ${
-        !composant.is_active ? "opacity-60" : ""
-      }`}
+      className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer"
     >
       {/* Image ou icône */}
       <div className="h-48 bg-purpl-ecru flex items-center justify-center relative">
@@ -55,12 +53,6 @@ export function ComposantCard({ composant, onEdit, onDelete }: ComposantCardProp
           <ToolIcon className="w-6 h-6 text-purpl-green" />
         )}
 
-        {/* Badge "Archivé" */}
-        {!composant.is_active && (
-          <div className="absolute top-2 right-2 bg-purpl-black text-white px-3 py-1 rounded-full text-xs font-medium">
-            Archivé
-          </div>
-        )}
       </div>
 
       <div className="p-4">

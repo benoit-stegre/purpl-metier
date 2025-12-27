@@ -92,7 +92,6 @@ export function ProjetModal({
     date_fin: "",
     budget: "",
     categorie_id: null as string | null,
-    is_active: true,
   });
 
   const [originalData, setOriginalData] = useState(formData);
@@ -140,7 +139,6 @@ export function ProjetModal({
           : "",
         budget: projet.budget?.toString() || "",
         categorie_id: projet.categorie_id || null,
-        is_active: projet.is_active !== undefined ? projet.is_active : true,
       };
 
       setFormData(loadedData);
@@ -187,7 +185,6 @@ export function ProjetModal({
       const { data, error } = await supabase
         .from("clients_pro")
         .select("id, raison_sociale, is_active")
-        .eq("is_active", true)
         .order("raison_sociale");
 
       if (error) throw error;
@@ -196,7 +193,6 @@ export function ProjetModal({
         setClients(data.map(client => ({
           id: client.id,
           name: client.raison_sociale,
-          is_active: client.is_active
         })));
       }
     } catch (error) {
@@ -210,8 +206,7 @@ export function ProjetModal({
       const supabase = createClient();
       const { data, error } = await supabase
         .from("produits")
-        .select("id, name, reference, prix_vente_total, photo_url, is_active")
-        .eq("is_active", true)
+        .select("id, name, reference, prix_vente_total, photo_url")
         .order("name");
 
       if (error) throw error;
@@ -231,8 +226,7 @@ export function ProjetModal({
       if (produits.length === 0) {
         const { data: produitsData } = await supabase
           .from("produits")
-          .select("id, name, reference, prix_vente_total, photo_url, is_active")
-          .eq("is_active", true)
+          .select("id, name, reference, prix_vente_total, photo_url")
           .order("name");
         produits = produitsData || [];
         setAvailableProduits(produits);
@@ -301,8 +295,7 @@ export function ProjetModal({
       formData.date_debut !== originalData.date_debut ||
       formData.date_fin !== originalData.date_fin ||
       formData.budget !== originalData.budget ||
-      formData.categorie_id !== originalData.categorie_id ||
-      formData.is_active !== originalData.is_active
+      formData.categorie_id !== originalData.categorie_id
     );
   };
 
@@ -432,7 +425,6 @@ export function ProjetModal({
       date_fin: "",
       budget: "",
       categorie_id: null as string | null,
-      is_active: true,
     };
     setFormData(emptyData);
     setOriginalData(emptyData);
@@ -561,7 +553,6 @@ export function ProjetModal({
         budget: formData.budget ? parseFloat(formData.budget) : null,
         categorie_id: formData.categorie_id || null,
         photo_url,
-        is_active: formData.is_active,
       };
 
       let projetId: string;
@@ -1167,42 +1158,21 @@ export function ProjetModal({
               </select>
             </div>
 
-            {/* Section Actif */}
-            <div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.is_active}
-                  onChange={(e) =>
-                    setFormData({ ...formData, is_active: e.target.checked })
-                  }
-                  className="w-4 h-4"
-                />
-                <span className="text-sm font-medium text-gray-700">Actif</span>
-              </label>
-            </div>
-
-            {/* Bouton Supprimer définitivement - Uniquement si archivé */}
-            {mode === "edit" && !formData.is_active && (
-              <div className="pt-4 border-t border-red-200">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-sm text-red-800 mb-3 font-medium flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Ce projet est archivé
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
-                  >
-                    <DeleteIcon className="w-4 h-4" />
-                    Supprimer définitivement
-                  </button>
-                  <p className="text-xs text-red-600 mt-2">
-                    Cette action est irréversible. Le projet sera supprimé de manière permanente.
-                  </p>
-                </div>
+            {/* Bouton Supprimer définitivement - Uniquement en mode édition */}
+            {mode === "edit" && (
+              <div className="pt-4 border-t border-red-200 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                >
+                  <DeleteIcon className="w-4 h-4" />
+                  Supprimer définitivement
+                </button>
+                <p className="text-xs text-red-600 mt-2">
+                  Cette action est irréversible. Le projet sera supprimé de manière permanente.
+                </p>
               </div>
             )}
 
@@ -1252,13 +1222,13 @@ export function ProjetModal({
           <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
             <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5" />
-              Suppression définitive
+              ⚠️ Attention : Suppression définitive
             </h3>
             <p className="text-gray-700 mb-2">
               Êtes-vous sûr de vouloir supprimer définitivement ce projet ?
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Cette action est <strong>irréversible</strong>. Toutes les données associées seront perdues.
+              <span className="text-red-600 font-semibold">Cette action est irréversible.</span> Toutes les données associées seront perdues.
             </p>
             <div className="flex flex-col gap-3">
               <button

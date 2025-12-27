@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { ProjetModal } from "./ProjetModal";
 import { ExportCommandeModal } from "./ExportCommandeModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
-import { PlusIcon, SearchIcon } from "@/components/ui/Icons";
+import { SearchIcon } from "@/components/ui/Icons";
 import { FileDown, FileSpreadsheet } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { exportProjetDevis } from "@/lib/exports/projetExports";
@@ -177,25 +177,6 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
 
   return (
     <>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold" style={{ color: "#76715A" }}>
-          Projets
-        </h1>
-        <button
-          onClick={() => {
-            setShowModal(true);
-            setModalMode("create");
-            setSelectedProjet(null);
-          }}
-          className="px-4 py-2 rounded-md hover:opacity-90 transition-colors flex items-center gap-2"
-          style={{ backgroundColor: "#ED693A", color: "white" }}
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nouveau projet
-        </button>
-      </div>
-
       {/* Filtres */}
       <div className="flex gap-4 mb-4 flex-wrap">
         {/* Input recherche */}

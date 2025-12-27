@@ -118,7 +118,7 @@ function HeaderContent() {
       {/* Seconde ligne : Titre + Toggle + Bouton Nouveau */}
       {(pageTitle || viewMode !== null || showNewButton) && (
         <div className="bg-[#EDEAE3] border-t border-white/10">
-          <div className="container mx-auto px-4 sm:px-6 py-3">
+          <div className="container mx-auto px-4 sm:px-6 py-1">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               {/* Titre */}
               {pageTitle && (

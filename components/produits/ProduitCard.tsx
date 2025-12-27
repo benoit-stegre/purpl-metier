@@ -81,7 +81,7 @@ export function ProduitCard({ produit, onEdit, onDelete }: ProduitCardProps) {
   return (
     <div 
       onClick={handleCardClick}
-      className={`bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer ${!produit.is_active ? 'opacity-60' : ''}`}
+      className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer"
     >
       {/* Image */}
       <div className="h-48 bg-purpl-ecru flex items-center justify-center relative overflow-hidden">
@@ -112,11 +112,6 @@ export function ProduitCard({ produit, onEdit, onDelete }: ProduitCardProps) {
           <ImageIcon className="w-6 h-6 text-purpl-green opacity-40" />
         </div>
         
-        {!produit.is_active && (
-          <div className="absolute top-2 right-2 bg-purpl-black text-white px-3 py-1 rounded-full text-xs font-medium z-10">
-            Archivé
-          </div>
-        )}
       </div>
       
       <div className="p-4">

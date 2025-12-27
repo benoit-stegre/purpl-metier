@@ -28,7 +28,7 @@ export default async function ComposantsPage() {
   }
 
   return (
-    <div className="py-4 md:py-6 lg:py-8">
+    <div className="py-1 md:py-1.5 lg:py-2">
       <ComposantsView
         initialComposants={composantsData || []}
         categories={categories || []}

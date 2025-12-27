@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
-import { SearchIcon, DeleteIcon, UserIcon } from "@/components/ui/Icons";
+import { SearchIcon, UserIcon } from "@/components/ui/Icons";
 import { ClientModal } from "./ClientModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { usePageHeader } from "@/contexts/PageHeaderContext";
@@ -54,18 +54,8 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [categories, setCategories] = useState<any[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    open: boolean;
-    clientId: string | null;
-    clientName: string;
-  }>({
-    open: false,
-    clientId: null,
-    clientName: "",
-  });
 
   const handleSuccess = () => {
     router.refresh();
@@ -82,34 +72,6 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
     setEditingClient(null);
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirm.clientId) return;
-
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("clients_pro")
-        .update({ is_active: false }) // Soft delete
-        .eq("id", deleteConfirm.clientId);
-
-      if (error) throw error;
-
-      router.refresh();
-      setDeleteConfirm({ open: false, clientId: null, clientName: "" });
-    } catch (error) {
-      console.error("Erreur suppression:", error);
-      toast.error("Erreur lors de la suppression");
-    }
-  };
-
-  const handleDeleteClick = (client: Client, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeleteConfirm({
-      open: true,
-      clientId: client.id,
-      clientName: client.raison_sociale,
-    });
-  };
 
   const handleNewClient = useCallback(() => {
     setEditingClient(null);
@@ -177,22 +139,14 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
         selectedCategory === "all" ||
         client.categorie_id === selectedCategory;
 
-      // Filtre statut
-      let matchesStatus = true;
-      if (statusFilter === "active") {
-        matchesStatus = client.is_active === true;
-      } else if (statusFilter === "archived") {
-        matchesStatus = client.is_active === false;
-      }
-
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesCategory;
     });
-  }, [initialClients, searchTerm, selectedCategory, statusFilter]);
+  }, [initialClients, searchTerm, selectedCategory]);
 
   return (
     <>
       {/* Filtres */}
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
+      <div className="flex flex-col md:flex-row gap-4 mb-1.5">
         {/* Barre de recherche */}
         <div className="w-full md:flex-1 relative">
           <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -230,16 +184,6 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
           </option>
         </select>
 
-        {/* Dropdown statut */}
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purpl-green bg-white cursor-pointer"
-        >
-          <option value="all">Tous les clients</option>
-          <option value="active">Actifs uniquement</option>
-          <option value="archived">Archivés uniquement</option>
-        </select>
       </div>
 
       {/* Compteur résultats */}
@@ -256,20 +200,13 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
           <div
             key={client.id}
             onClick={() => handleEdit(client)}
-            className={`bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer ${!client.is_active ? 'opacity-60' : ''}`}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
           >
-            {/* Icône utilisateur + Bouton suppression */}
-            <div className="flex items-center justify-between mb-3">
+            {/* Icône utilisateur */}
+            <div className="mb-3">
               <div className="w-12 h-12 bg-purpl-green/10 rounded-full flex items-center justify-center">
                 <UserIcon className="w-6 h-6 text-purpl-green" />
               </div>
-              <button
-                onClick={(e) => handleDeleteClick(client, e)}
-                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                type="button"
-              >
-                <DeleteIcon className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Raison sociale */}
@@ -313,14 +250,9 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
               </p>
             )}
 
-            {/* Badge Archivé + Date */}
+            {/* Date */}
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-              {!client.is_active && (
-                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
-                  Archivé
-                </span>
-              )}
-              <span className={`text-xs text-gray-400 ${client.is_active ? '' : 'ml-auto'}`}>
+              <span className="text-xs text-gray-400">
                 {client.created_at && new Date(client.created_at).toLocaleDateString("fr-FR")}
               </span>
             </div>
@@ -352,46 +284,6 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
         />
       )}
 
-      {/* Popup Confirmation Suppression */}
-      {deleteConfirm.open && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={() =>
-            setDeleteConfirm({ open: false, clientId: null, clientName: "" })
-          }
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-purpl-black mb-4">
-              Confirmer la suppression
-            </h3>
-            <p className="text-purpl-green mb-6">
-              Êtes-vous sûr de vouloir supprimer le client{" "}
-              <strong className="text-purpl-black">{deleteConfirm.clientName}</strong> ?
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() =>
-                  setDeleteConfirm({ open: false, clientId: null, clientName: "" })
-                }
-                className="px-4 py-2 border-2 border-purpl-ecru rounded-lg hover:bg-purpl-ecru transition-colors text-purpl-black"
-                type="button"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                type="button"
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

@@ -39,22 +39,34 @@ export default async function ProduitsPage() {
     console.error('Erreur fetch produits:', produitsError)
   }
   
-  // Fetch tous les composants pour le modal
+  // Fetch tous les composants avec leurs catégories pour le modal
   const { data: composants } = await supabase
     .from('composants')
-    .select('id, name, reference, prix_vente, photo_url, is_active, poids')
-    .eq('is_active', true)
+    .select(`
+      id, 
+      name, 
+      reference, 
+      prix_vente, 
+      photo_url, 
+      is_active, 
+      poids,
+      categorie_id,
+      categorie:categories_composants (
+        id,
+        name,
+        color
+      )
+    `)
     .order('name')
   
   // Transformer les composants pour gérer les valeurs null
   const transformedComposants = (composants || []).map(comp => ({
     ...comp,
     prix_vente: comp.prix_vente ?? 0,
-    is_active: comp.is_active ?? true,
   }))
   
   return (
-    <div className="py-4 md:py-6 lg:py-8">
+    <div className="py-1 md:py-1.5 lg:py-2">
       <ProduitsView 
         initialProduits={produits || []} 
         availableComposants={transformedComposants}

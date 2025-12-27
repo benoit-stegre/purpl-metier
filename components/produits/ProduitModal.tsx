@@ -35,6 +35,12 @@ type Composant = {
   photo_url: string | null
   is_active: boolean
   poids: number | null
+  categorie_id: string | null
+  categorie: {
+    id: string
+    name: string
+    color: string | null
+  } | null
 }
 
 type SelectedComposant = {
@@ -70,7 +76,6 @@ export function ProduitModal({
     categorie_id: null as string | null,
     prix_heure: 0,
     nombre_heures: 0,
-    is_active: true,
   }
   
   const [formData, setFormData] = useState(initialFormData)
@@ -88,6 +93,8 @@ export function ProduitModal({
   // State pour le sélecteur
   const [showComposantSelector, setShowComposantSelector] = useState(false)
   const [composantSearch, setComposantSearch] = useState('')
+  const [composantCategoryFilter, setComposantCategoryFilter] = useState<string>('all')
+  const [composantCategories, setComposantCategories] = useState<any[]>([])
   
   const isEditMode = editingProduit !== null
   
@@ -95,8 +102,39 @@ export function ProduitModal({
   useEffect(() => {
     if (isOpen) {
       fetchCategories()
+      fetchComposantCategories()
     }
   }, [isOpen])
+  
+  // Fetch catégories de composants
+  const fetchComposantCategories = async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('categories_composants')
+        .select('*')
+        .order('name')
+      
+      if (error) throw error
+      // Filtrer la catégorie "Sans catégorie" si elle existe (ne devrait pas être dans la BDD)
+      if (data) {
+        const filtered = data.filter(cat => {
+          const name = cat.name?.toLowerCase().trim() || ''
+          // Exclure toutes les variations de "Sans catégorie"
+          const isSansCategorie = name.includes('sans') && name.includes('catégorie') ||
+                                  name.includes('sans') && name.includes('categorie') ||
+                                  name === 'sans catégorie' ||
+                                  name === 'sans_categorie' ||
+                                  name === 'sans-catégorie' ||
+                                  name === 'sans-categorie'
+          return !isSansCategorie
+        })
+        setComposantCategories(filtered)
+      }
+    } catch (error) {
+      console.error('Erreur fetch catégories composants:', error)
+    }
+  }
   
   const fetchCategories = async () => {
     try {
@@ -135,7 +173,6 @@ export function ProduitModal({
         categorie_id: categorieId,
         prix_heure: (editingProduit as any).prix_heure || 0,
         nombre_heures: (editingProduit as any).nombre_heures || 0,
-        is_active: editingProduit.is_active ?? true,
       }
       
       console.log('📝 loadedData avec categorie_id:', loadedData.categorie_id)
@@ -204,8 +241,7 @@ export function ProduitModal({
       formData.description !== originalData.description ||
       formData.categorie_id !== originalData.categorie_id ||
       formData.prix_heure !== originalData.prix_heure ||
-      formData.nombre_heures !== originalData.nombre_heures ||
-      formData.is_active !== originalData.is_active
+      formData.nombre_heures !== originalData.nombre_heures
     
     // Vérifier changements composants
     const composantsChanged = 
@@ -318,11 +354,18 @@ export function ProduitModal({
   const prixVenteCalcule = prixTotalComposants + coutTemps
   
   // Filtrage composants pour le sélecteur
-  const filteredComposants = availableComposants.filter(comp =>
-    composantSearch === '' ||
-    comp.name.toLowerCase().includes(composantSearch.toLowerCase()) ||
-    (comp.reference && comp.reference.toLowerCase().includes(composantSearch.toLowerCase()))
-  )
+  const filteredComposants = availableComposants.filter(comp => {
+    // Filtre recherche
+    const matchesSearch = composantSearch === '' ||
+      comp.name.toLowerCase().includes(composantSearch.toLowerCase()) ||
+      (comp.reference && comp.reference.toLowerCase().includes(composantSearch.toLowerCase()))
+    
+    // Filtre catégorie
+    const matchesCategory = composantCategoryFilter === 'all' ||
+      comp.categorie_id === composantCategoryFilter
+    
+    return matchesSearch && matchesCategory
+  })
   
   // ✅ Fonction commune pour la sauvegarde
   const performSave = async () => {
@@ -371,7 +414,6 @@ export function ProduitModal({
         prix_vente_total: prixVenteCalcule,
         prix_heure: formData.prix_heure || 0,
         nombre_heures: formData.nombre_heures || 0,
-        is_active: formData.is_active,
       }
 
       // Debug: vérifier categorie_id
@@ -589,7 +631,6 @@ export function ProduitModal({
         prix_vente_total: prixVenteCalcule,
         prix_heure: formData.prix_heure || 0,
         nombre_heures: formData.nombre_heures || 0,
-        is_active: formData.is_active,
       }
       console.log('💾 Données à sauvegarder:', dataToSave)
       console.log('🔍 categorie_id dans dataToSave:', dataToSave.categorie_id)
@@ -1035,16 +1076,32 @@ export function ProduitModal({
                       </button>
                     </div>
                     
-                    {/* Recherche */}
-                    <div className="relative mb-3">
-                      <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purpl-green" />
-                      <input
-                        type="text"
-                        value={composantSearch}
-                        onChange={(e) => setComposantSearch(e.target.value)}
-                        placeholder="Rechercher un composant..."
-                        className="w-full pl-10 pr-4 py-2 border border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                      />
+                    {/* Recherche et filtre catégorie */}
+                    <div className="space-y-3 mb-3">
+                      <div className="relative">
+                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purpl-green" />
+                        <input
+                          type="text"
+                          value={composantSearch}
+                          onChange={(e) => setComposantSearch(e.target.value)}
+                          placeholder="Rechercher un composant..."
+                          className="w-full pl-10 pr-4 py-2 border border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
+                        />
+                      </div>
+                      
+                      {/* Filtre par catégorie */}
+                      <select
+                        value={composantCategoryFilter}
+                        onChange={(e) => setComposantCategoryFilter(e.target.value)}
+                        className="w-full px-4 py-2 border border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                      >
+                        <option value="all">Toutes les catégories</option>
+                        {composantCategories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     
                     {/* Liste composants disponibles */}
@@ -1186,49 +1243,21 @@ export function ProduitModal({
                 </div>
               </div>
               
-              {/* Archivage */}
+              {/* Bouton Supprimer définitivement - Uniquement en mode édition */}
               {isEditMode && (
-                <div className="pt-4 border-t border-purpl-ecru">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={!formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: !e.target.checked })}
-                      className="w-5 h-5 rounded border-2 border-purpl-ecru text-purpl-orange focus:ring-purpl-orange cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-purpl-black group-hover:text-purpl-orange transition-colors">
-                        Archiver ce produit
-                      </span>
-                      <p className="text-xs text-purpl-green mt-1">
-                        Le produit n'apparaîtra plus dans les listes actives
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              )}
-
-              {/* Bouton Supprimer définitivement - Uniquement si archivé */}
-              {isEditMode && !formData.is_active && (
                 <div className="pt-4 border-t border-red-200">
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-sm text-red-800 mb-3 font-medium flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      Ce produit est archivé
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      disabled={isLoading}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
-                    >
-                      <DeleteIcon className="w-4 h-4" />
-                      Supprimer définitivement
-                    </button>
-                    <p className="text-xs text-red-600 mt-2">
-                      Cette action est irréversible. Le produit sera supprimé de manière permanente.
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                  >
+                    <DeleteIcon className="w-4 h-4" />
+                    Supprimer définitivement
+                  </button>
+                  <p className="text-xs text-red-600 mt-2">
+                    Cette action est irréversible. Le produit sera supprimé de manière permanente.
+                  </p>
                 </div>
               )}
               
@@ -1322,13 +1351,13 @@ export function ProduitModal({
           <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
             <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5" />
-              Suppression définitive
+              ⚠️ Attention : Suppression définitive
             </h3>
             <p className="text-gray-700 mb-2">
               Êtes-vous sûr de vouloir supprimer définitivement ce produit ?
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Cette action est <strong>irréversible</strong>. Toutes les données associées seront perdues.
+              <span className="text-red-600 font-semibold">Cette action est irréversible.</span> Toutes les données associées seront perdues.
             </p>
 
             <div className="flex flex-col gap-3">
