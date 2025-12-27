@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { DashboardContent } from "./DashboardContent";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -18,35 +19,7 @@ export default async function DashboardPage() {
     projets: projetsResult.status === "fulfilled" ? projetsResult.value.count || 0 : 0,
   };
 
-  return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8 text-gray-900">Dashboard</h1>
-
-      {/* Cards Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard
-          title="Composants"
-          value={stats.composants}
-          href="/composants"
-        />
-        <StatsCard
-          title="Produits"
-          value={stats.produits}
-          href="/produits"
-        />
-        <StatsCard
-          title="Clients"
-          value={stats.clients}
-          href="/clients"
-        />
-        <StatsCard
-          title="Projets"
-          value={stats.projets}
-          href="/projets"
-        />
-      </div>
-    </div>
-  );
+  return <DashboardContent stats={stats} />;
 }
 
 function StatsCard({

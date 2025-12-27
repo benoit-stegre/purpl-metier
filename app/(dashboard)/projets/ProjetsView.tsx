@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ProjetsGrid } from "@/components/projets/ProjetsGrid";
 import { ProjetsKanban } from "@/components/projets/ProjetsKanban";
 import { ProjetModal } from "@/components/projets/ProjetModal";
-import { LayoutGrid, Columns3 } from "lucide-react";
+import { usePageHeader } from "@/contexts/PageHeaderContext";
 
 // Types pour ProjetsGrid (format existant)
 interface ProjetGrid {
@@ -95,8 +95,6 @@ interface ProjetsViewProps {
   projetsDetails: ProjetDetailRaw[];
 }
 
-type ViewMode = "kanban" | "grid";
-
 // Type pour le modal (adapté depuis ProjetRaw)
 interface ProjetForModal {
   id: string;
@@ -117,7 +115,14 @@ interface ProjetForModal {
 
 export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const {
+    setPageTitle,
+    viewMode,
+    setViewMode,
+    setShowNewButton,
+    setNewButtonLabel,
+    setOnNewClick,
+  } = usePageHeader();
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingProjet, setEditingProjet] = useState<ProjetForModal | null>(null);
@@ -205,11 +210,11 @@ export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
   };
 
   // Handler pour ouvrir le modal en mode création
-  const handleNewProjet = () => {
+  const handleNewProjet = useCallback(() => {
     setEditingProjet(null);
     setModalMode("create");
     setShowModal(true);
-  };
+  }, []);
 
   // Handler pour fermer le modal
   const handleCloseModal = () => {
@@ -217,45 +222,26 @@ export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
     setEditingProjet(null);
   };
 
+  // Configuration du header via le Context
+  useEffect(() => {
+    setPageTitle("Projets");
+    setViewMode("kanban");
+    setShowNewButton(true);
+    setNewButtonLabel("Nouveau");
+    setOnNewClick(() => handleNewProjet);
+
+    // Cleanup : réinitialiser le header quand on quitte la page
+    return () => {
+      setPageTitle("");
+      setViewMode(null);
+      setShowNewButton(false);
+      setNewButtonLabel("Nouveau");
+      setOnNewClick(null);
+    };
+  }, [setPageTitle, setViewMode, setShowNewButton, setNewButtonLabel, setOnNewClick, handleNewProjet]);
+
   return (
     <>
-      {/* Header avec titre et toggle */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: "#76715A" }}>
-          Projets
-        </h1>
-
-        <div className="flex items-center gap-3">
-          {/* Toggle vue */}
-          <div className="flex items-center bg-[#EDEAE3] rounded-lg p-1">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                viewMode === "kanban"
-                  ? "bg-white text-[#76715A] shadow-sm"
-                  : "text-gray-500 hover:text-[#76715A]"
-              }`}
-              title="Vue Kanban"
-            >
-              <Columns3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                viewMode === "grid"
-                  ? "bg-white text-[#76715A] shadow-sm"
-                  : "text-gray-500 hover:text-[#76715A]"
-              }`}
-              title="Vue Grille"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span className="hidden sm:inline">Grille</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Vue active */}
       {viewMode === "kanban" ? (
         <ProjetsKanban

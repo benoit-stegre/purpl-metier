@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
-import { PlusIcon, SearchIcon, DeleteIcon, UserIcon } from "@/components/ui/Icons";
+import { SearchIcon, DeleteIcon, UserIcon } from "@/components/ui/Icons";
 import { ClientModal } from "./ClientModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
+import { usePageHeader } from "@/contexts/PageHeaderContext";
 
 // Type Client basé sur clients_pro
 interface Client {
@@ -42,6 +43,13 @@ interface ClientsGridProps {
 
 export function ClientsGrid({ initialClients }: ClientsGridProps) {
   const router = useRouter();
+  const {
+    setPageTitle,
+    setViewMode,
+    setShowNewButton,
+    setNewButtonLabel,
+    setOnNewClick,
+  } = usePageHeader();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -103,6 +111,29 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
     });
   };
 
+  const handleNewClient = useCallback(() => {
+    setEditingClient(null);
+    setIsModalOpen(true);
+  }, []);
+
+  // Configuration du header via le Context
+  useEffect(() => {
+    setPageTitle("Clients");
+    setViewMode(null); // Pas de toggle Kanban/Grille
+    setShowNewButton(true);
+    setNewButtonLabel("Nouveau client");
+    setOnNewClick(() => handleNewClient);
+
+    // Cleanup : réinitialiser le header quand on quitte la page
+    return () => {
+      setPageTitle("");
+      setViewMode(null);
+      setShowNewButton(false);
+      setNewButtonLabel("Nouveau");
+      setOnNewClick(null);
+    };
+  }, [setPageTitle, setViewMode, setShowNewButton, setNewButtonLabel, setOnNewClick, handleNewClient]);
+
   // Fetch catégories pour les filtres
   useEffect(() => {
     fetchCategories();
@@ -160,21 +191,6 @@ export function ClientsGrid({ initialClients }: ClientsGridProps) {
 
   return (
     <>
-      {/* Header avec titre et bouton */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Clients</h1>
-        <button
-          onClick={() => {
-            setEditingClient(null);
-            setIsModalOpen(true);
-          }}
-          className="w-full sm:w-auto bg-purpl-orange text-white px-6 py-3 rounded-lg font-medium hover:bg-purpl-orange/90 transition-colors flex items-center justify-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nouveau client
-        </button>
-      </div>
-
       {/* Filtres */}
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         {/* Barre de recherche */}

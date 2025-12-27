@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
-import { PlusIcon, DeleteIcon } from "@/components/ui/Icons";
+import { DeleteIcon } from "@/components/ui/Icons";
 import { CategoryModal } from "./CategoryModal";
+import { usePageHeader } from "@/contexts/PageHeaderContext";
 
 interface Category {
   id: string;
@@ -21,6 +22,13 @@ type CategoryType = "composants" | "produits" | "clients" | "projets";
 export function CategoriesManager() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const {
+    setPageTitle,
+    setViewMode,
+    setShowNewButton,
+    setNewButtonLabel,
+    setOnNewClick,
+  } = usePageHeader();
   const [activeTab, setActiveTab] = useState<CategoryType>("composants");
   const [categories, setCategories] = useState<Category[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -111,22 +119,31 @@ export function CategoriesManager() {
     });
   };
 
+  const handleNewCategory = useCallback(() => {
+    setEditingCategory(null);
+    setIsModalOpen(true);
+  }, []);
+
+  // Configuration du header via le Context
+  useEffect(() => {
+    setPageTitle("Catégories");
+    setViewMode(null); // Pas de toggle Kanban/Grille
+    setShowNewButton(true);
+    setNewButtonLabel("Nouvelle catégorie");
+    setOnNewClick(() => handleNewCategory);
+
+    // Cleanup : réinitialiser le header quand on quitte la page
+    return () => {
+      setPageTitle("");
+      setViewMode(null);
+      setShowNewButton(false);
+      setNewButtonLabel("Nouveau");
+      setOnNewClick(null);
+    };
+  }, [setPageTitle, setViewMode, setShowNewButton, setNewButtonLabel, setOnNewClick, handleNewCategory]);
+
   return (
     <>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-semibold text-purpl-black">Catégories</h1>
-        <button
-          onClick={() => {
-            setEditingCategory(null);
-            setIsModalOpen(true);
-          }}
-          className="bg-purpl-orange text-white px-6 py-3 rounded-lg font-medium hover:bg-purpl-orange/90 transition-colors flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nouvelle catégorie
-        </button>
-      </div>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b mb-6">
