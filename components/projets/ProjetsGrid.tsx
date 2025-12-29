@@ -180,7 +180,7 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
       {/* Filtres */}
       <div className="flex gap-4 mb-4 flex-wrap">
         {/* Input recherche */}
-        <div className="flex-1 min-w-[200px] relative">
+        <div className="flex-1 min-w-0 sm:min-w-[200px] relative">
           <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"

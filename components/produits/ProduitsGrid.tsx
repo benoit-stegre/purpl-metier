@@ -158,7 +158,7 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
       {/* Filtres */}
       <div className="flex gap-4 mb-8 flex-wrap">
         {/* Barre de recherche */}
-        <div className="flex-1 min-w-[300px] relative">
+        <div className="flex-1 min-w-0 sm:min-w-[300px] relative">
           <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
