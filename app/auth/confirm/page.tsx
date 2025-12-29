@@ -104,7 +104,7 @@ export default function ConfirmPage() {
           purpl
         </h1>
 
-        <div className="rounded-2xl p-8 shadow-sm" style={{ backgroundColor: '#EDEAE3' }}>
+        <div className="rounded-2xl p-4 sm:p-6 md:p-8 shadow-sm" style={{ backgroundColor: '#EDEAE3' }}>
           <div className="mb-4">
             {status === 'loading' && (
               <div 

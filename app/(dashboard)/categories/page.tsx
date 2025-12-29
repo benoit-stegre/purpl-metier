@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function CategoriesPage() {
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <Suspense fallback={<div>Chargement...</div>}>
         <CategoriesManager />
       </Suspense>

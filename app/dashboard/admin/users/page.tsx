@@ -110,13 +110,13 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="max-w-5xl mx-auto">
         
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-2xl font-semibold" style={{ color: '#2F2F2E' }}>
+            <h1 className="text-xl sm:text-2xl font-semibold" style={{ color: '#2F2F2E' }}>
               Gestion des utilisateurs
             </h1>
             <p className="mt-2 text-sm" style={{ color: '#76715A' }}>
@@ -126,7 +126,7 @@ export default function UsersPage() {
 
           <Link
             href="/dashboard/admin/invite"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm text-white transition-all"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm text-white transition-all w-full sm:w-auto"
             style={{ backgroundColor: '#ED693A' }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#E77E55'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ED693A'}
@@ -157,7 +157,7 @@ export default function UsersPage() {
         <div className="rounded-2xl shadow-sm overflow-hidden" style={{ backgroundColor: '#EDEAE3' }}>
           
           {loading ? (
-            <div className="p-8 text-center">
+            <div className="p-6 sm:p-8 text-center">
               <div 
                 className="animate-spin h-8 w-8 border-4 border-t-transparent rounded-full mx-auto"
                 style={{ borderColor: '#ED693A', borderTopColor: 'transparent' }}
@@ -165,77 +165,126 @@ export default function UsersPage() {
               <p className="mt-4 text-sm" style={{ color: '#76715A' }}>Chargement...</p>
             </div>
           ) : users.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-6 sm:p-8 text-center">
               <p className="text-sm" style={{ color: '#76715A' }}>Aucun utilisateur</p>
             </div>
           ) : (
-            <table className="w-full">
-              <thead>
-                <tr style={{ backgroundColor: '#D6CCAF40' }}>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
-                    Rôle
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
-                    Statut
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
-                    Dernière connexion
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: '#D6CCAF' }}>
+            <>
+              {/* Version Desktop - Tableau */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr style={{ backgroundColor: '#D6CCAF40' }}>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
+                        Rôle
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
+                        Statut
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
+                        Dernière connexion
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: '#76715A' }}>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: '#D6CCAF' }}>
+                    {users.map((user) => (
+                      <tr key={user.id}>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium" style={{ color: '#2F2F2E' }}>
+                            {user.email}
+                            {user.email === currentUserEmail && (
+                              <span className="ml-2 text-xs" style={{ color: '#76715A' }}>(vous)</span>
+                            )}
+                          </p>
+                          <p className="text-xs" style={{ color: '#76715A' }}>
+                            Créé le {formatDate(user.created_at)}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span 
+                            className="px-2 py-1 rounded text-xs font-medium"
+                            style={{ 
+                              backgroundColor: user.role === 'admin' ? '#ED693A20' : '#76715A20',
+                              color: user.role === 'admin' ? '#ED693A' : '#76715A'
+                            }}
+                          >
+                            {user.role === 'admin' ? 'Admin' : 'Utilisateur'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.email_confirmed_at ? (
+                            <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#76715A' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                              Actif
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium" style={{ color: '#C6846C' }}>
+                              En attente
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm" style={{ color: '#76715A' }}>
+                          {formatDate(user.last_sign_in_at)}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {canDelete(user) ? (
+                            <button
+                              onClick={() => setDeleteModal({ open: true, user })}
+                              className="p-2 rounded-lg transition-all"
+                              style={{ color: '#C6846C' }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#C6846C20'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent'
+                              }}
+                              title="Supprimer l'utilisateur"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="text-xs" style={{ color: '#D6CCAF' }}>-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Version Mobile - Cards */}
+              <div className="md:hidden divide-y" style={{ borderColor: '#D6CCAF' }}>
                 {users.map((user) => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-medium" style={{ color: '#2F2F2E' }}>
-                        {user.email}
-                        {user.email === currentUserEmail && (
-                          <span className="ml-2 text-xs" style={{ color: '#76715A' }}>(vous)</span>
-                        )}
-                      </p>
-                      <p className="text-xs" style={{ color: '#76715A' }}>
-                        Créé le {formatDate(user.created_at)}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span 
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ 
-                          backgroundColor: user.role === 'admin' ? '#ED693A20' : '#76715A20',
-                          color: user.role === 'admin' ? '#ED693A' : '#76715A'
-                        }}
-                      >
-                        {user.role === 'admin' ? 'Admin' : 'Utilisateur'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {user.email_confirmed_at ? (
-                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#76715A' }}>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                          Actif
-                        </span>
-                      ) : (
-                        <span className="text-xs font-medium" style={{ color: '#C6846C' }}>
-                          En attente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm" style={{ color: '#76715A' }}>
-                      {formatDate(user.last_sign_in_at)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {canDelete(user) ? (
+                  <div key={user.id} className="p-4">
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: '#2F2F2E' }}>
+                          {user.email}
+                          {user.email === currentUserEmail && (
+                            <span className="ml-2 text-xs" style={{ color: '#76715A' }}>(vous)</span>
+                          )}
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: '#76715A' }}>
+                          Créé le {formatDate(user.created_at)}
+                        </p>
+                      </div>
+                      {canDelete(user) && (
                         <button
                           onClick={() => setDeleteModal({ open: true, user })}
-                          className="p-2 rounded-lg transition-all"
+                          className="p-2 rounded-lg transition-all flex-shrink-0"
                           style={{ color: '#C6846C' }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.backgroundColor = '#C6846C20'
@@ -252,14 +301,38 @@ export default function UsersPage() {
                             <line x1="14" y1="11" x2="14" y2="17"></line>
                           </svg>
                         </button>
-                      ) : (
-                        <span className="text-xs" style={{ color: '#D6CCAF' }}>-</span>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                      <span 
+                        className="px-2 py-1 rounded text-xs font-medium"
+                        style={{ 
+                          backgroundColor: user.role === 'admin' ? '#ED693A20' : '#76715A20',
+                          color: user.role === 'admin' ? '#ED693A' : '#76715A'
+                        }}
+                      >
+                        {user.role === 'admin' ? 'Admin' : 'Utilisateur'}
+                      </span>
+                      {user.email_confirmed_at ? (
+                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#76715A' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                          Actif
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium" style={{ color: '#C6846C' }}>
+                          En attente
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: '#76715A' }}>
+                        Dernière connexion: {formatDate(user.last_sign_in_at)}
+                      </span>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -269,7 +342,7 @@ export default function UsersPage() {
       {deleteModal.open && deleteModal.user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(47, 47, 46, 0.5)' }}>
           <div 
-            className="max-w-md w-full rounded-2xl p-6 shadow-xl"
+            className="max-w-md w-full rounded-2xl p-4 sm:p-6 shadow-xl"
             style={{ backgroundColor: '#EDEAE3' }}
           >
             <h3 className="text-lg font-semibold mb-2" style={{ color: '#2F2F2E' }}>
@@ -282,11 +355,11 @@ export default function UsersPage() {
               Cette action est irréversible.
             </p>
 
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
               <button
                 onClick={() => setDeleteModal({ open: false, user: null })}
                 disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 style={{ 
                   color: '#76715A',
                   border: '1px solid #D6CCAF'
@@ -299,7 +372,7 @@ export default function UsersPage() {
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
                 style={{ backgroundColor: '#C6846C' }}
                 onMouseEnter={(e) => !deleting && (e.currentTarget.style.backgroundColor = '#B5735B')}
                 onMouseLeave={(e) => !deleting && (e.currentTarget.style.backgroundColor = '#C6846C')}

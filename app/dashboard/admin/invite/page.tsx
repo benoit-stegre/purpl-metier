@@ -40,13 +40,13 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="max-w-2xl mx-auto">
         
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6 md:mb-8">
           <h1 
-            className="text-2xl font-semibold"
+            className="text-xl sm:text-2xl font-semibold"
             style={{ color: '#2F2F2E' }}
           >
             Inviter un utilisateur
@@ -61,7 +61,7 @@ export default function InvitePage() {
 
         {/* Card formulaire */}
         <div 
-          className="rounded-2xl p-8 shadow-sm"
+          className="rounded-2xl p-4 sm:p-6 md:p-8 shadow-sm"
           style={{ backgroundColor: '#EDEAE3' }}
         >
           <form onSubmit={handleInvite} className="space-y-5">

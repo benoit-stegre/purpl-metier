@@ -72,7 +72,7 @@ function LoginForm() {
 
         {/* Card formulaire */}
         <div 
-          className="rounded-2xl p-8 shadow-sm"
+          className="rounded-2xl p-4 sm:p-6 md:p-8 shadow-sm"
           style={{ backgroundColor: '#EDEAE3' }}
         >
           <h2 
