@@ -118,3 +118,4 @@ Le code est maintenant **plus adapté aux petits écrans** tout en conservant un
 
 Les colonnes Kanban conservent leur `min-w-[260px]` car c'est nécessaire pour leur fonctionnement optimal. Le scroll horizontal gère correctement les très petits écrans.
 
+

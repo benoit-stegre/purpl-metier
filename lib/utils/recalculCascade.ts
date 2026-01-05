@@ -55,8 +55,8 @@ async function recalculerProduit(produitId: string): Promise<void> {
     .from("produits")
     .select(`
       id,
-      heures_travail,
-      tarif_horaire,
+      nombre_heures,
+      prix_heure,
       produits_composants (
         quantite,
         composant:composants (
@@ -87,17 +87,15 @@ async function recalculerProduit(produitId: string): Promise<void> {
   }
 
   // Calculer le coût de la main d'œuvre
-  const coutMainOeuvre = (produit.heures_travail || 0) * (produit.tarif_horaire || 0);
+  const coutMainOeuvre = (produit.nombre_heures || 0) * (produit.prix_heure || 0);
 
   // Prix total du produit
   const prixVenteTotal = coutComposants + coutMainOeuvre;
 
-  // Mettre à jour le produit
+  // Mettre à jour le produit (uniquement prix_vente_total - les autres colonnes n'existent pas dans la BDD)
   await supabase
     .from("produits")
     .update({
-      cout_composants: coutComposants,
-      cout_main_oeuvre: coutMainOeuvre,
       prix_vente_total: prixVenteTotal,
     })
     .eq("id", produitId);
