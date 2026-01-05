@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/Icons";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
+import type { Client } from "@/types";
 
 interface Contact {
   id?: string;
@@ -17,27 +18,6 @@ interface Contact {
   nom: string;
   email: string;
   telephone: string;
-}
-
-interface Client {
-  id: string;
-  raison_sociale: string;
-  siret: string | null;
-  num_tva: string | null;
-  contact_nom: string | null;
-  contact_prenom: string | null;
-  contact_email: string | null;
-  contact_telephone: string | null;
-  adresse_ligne1: string | null;
-  adresse_ligne2: string | null;
-  ville: string | null;
-  code_postal: string | null;
-  pays: string | null;
-  categorie_id: string | null;
-  notes: string | null;
-  is_active: boolean | null;
-  created_at: string | null;
-  updated_at: string | null;
 }
 
 interface ClientModalProps {

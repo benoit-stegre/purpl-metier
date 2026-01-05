@@ -4,13 +4,10 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Euro, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import { WeightIcon } from "@/components/ui/Icons";
-import type { Database } from "@/types/database.types";
+import type { Composant, CategoryComposant } from "@/types";
 
-type Composant = Database["public"]["Tables"]["composants"]["Row"] & {
-  categorie: Database["public"]["Tables"]["categories_composants"]["Row"] | null;
-};
-
-type Category = Database["public"]["Tables"]["categories_composants"]["Row"];
+// Alias pour compatibilité
+type Category = CategoryComposant;
 
 interface ComposantsKanbanProps {
   composants: Composant[];

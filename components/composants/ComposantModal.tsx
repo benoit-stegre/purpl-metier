@@ -13,14 +13,11 @@ import {
 import { AlertTriangle } from "lucide-react";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { cascadeDepuisComposant } from "@/lib/utils/recalculCascade";
-import type { Database } from "@/types/database.types";
+import type { Composant, CategoryComposant } from "@/types";
 
-type Category = Database["public"]["Tables"]["categories_composants"]["Row"] & {
+// Alias pour compatibilité
+type Category = CategoryComposant & {
   name: string;
-};
-
-type Composant = Database["public"]["Tables"]["composants"]["Row"] & {
-  categorie: Database["public"]["Tables"]["categories_composants"]["Row"] | null;
 };
 
 interface ComposantModalProps {

@@ -8,13 +8,10 @@ import { SearchIcon } from "@/components/ui/Icons";
 import { ComposantCard } from "./ComposantCard";
 import { ComposantModal } from "./ComposantModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
-import type { Database } from "@/types/database.types";
+import type { Composant, CategoryComposant } from "@/types";
 
-type Composant = Database["public"]["Tables"]["composants"]["Row"] & {
-  categorie: Database["public"]["Tables"]["categories_composants"]["Row"] | null;
-};
-
-type Category = Database["public"]["Tables"]["categories_composants"]["Row"];
+// Alias pour compatibilité
+type Category = CategoryComposant;
 
 interface ComposantsGridProps {
   initialComposants: Composant[];

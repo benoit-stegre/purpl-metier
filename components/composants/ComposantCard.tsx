@@ -2,11 +2,7 @@
 
 import Image from "next/image";
 import { EditIcon, DuplicateIcon, DeleteIcon, ToolIcon, WeightIcon } from "@/components/ui/Icons";
-import type { Database } from "@/types/database.types";
-
-type Composant = Database["public"]["Tables"]["composants"]["Row"] & {
-  categorie: Database["public"]["Tables"]["categories_composants"]["Row"] | null;
-};
+import type { Composant } from "@/types";
 
 interface ComposantCardProps {
   composant: Composant;

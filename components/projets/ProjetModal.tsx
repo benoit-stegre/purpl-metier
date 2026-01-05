@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/Icons";
 import { AlertTriangle, Check, Lock } from "lucide-react";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
+import type { ProduitMinimal, ClientMinimal, CategoryProjet } from "@/types";
 
 interface Projet {
   id: string;
@@ -33,27 +34,10 @@ interface Projet {
   updated_at: string;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  color: string | null;
-}
-
-interface Client {
-  id: string;
-  name: string;
-  is_active: boolean;
-}
-
-type Produit = {
-  id: string;
-  name: string;
-  reference: string | null;
-  prix_vente_total: number | null;
-  photo_url: string | null;
-  is_active: boolean;
-};
+// Alias pour compatibilité
+type Category = CategoryProjet;
+type Client = ClientMinimal;
+type Produit = ProduitMinimal;
 
 type SelectedProduit = {
   produit_id: string;

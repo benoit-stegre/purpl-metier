@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Configuration Turbopack vide (les exclusions sont gérées par tsconfig.json)
+  turbopack: {},
 };
 
 export default nextConfig;

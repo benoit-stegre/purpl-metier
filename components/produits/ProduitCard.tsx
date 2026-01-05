@@ -3,28 +3,7 @@
 import Image from 'next/image'
 import { EditIcon, DuplicateIcon, DeleteIcon, ToolIcon, ImageIcon, WeightIcon } from '@/components/ui/Icons'
 import { Package } from 'lucide-react'
-import type { Database } from '@/types/database.types'
-
-type Produit = Database['public']['Tables']['produits']['Row'] & {
-  produits_composants: Array<{
-    id: string
-    quantite: number
-    composant: {
-      id: string
-      name: string
-      reference: string | null
-      prix_vente: number
-      photo_url: string | null
-      poids: number | null
-    } | null
-  }>
-  categories_produits: {
-    id: string
-    name: string
-    slug: string
-    color: string | null
-  } | null
-}
+import type { Produit } from '@/types'
 
 interface ProduitCardProps {
   produit: Produit

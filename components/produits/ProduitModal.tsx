@@ -6,42 +6,10 @@ import { CloseIcon, SaveIcon, BackIcon, DeleteIcon, SearchIcon, PlusIcon, ToolIc
 import { AlertTriangle, Check } from 'lucide-react'
 import CategoryManagerModal from '@/components/categories/CategoryManagerModal'
 import { recalculerProjetsBrouillonPourProduit } from '@/lib/utils/recalculCascade'
-import type { Database } from '@/types/database.types'
+import type { Produit, ComposantForProduit } from '@/types'
 
-type Produit = Database['public']['Tables']['produits']['Row'] & {
-  produits_composants: Array<{
-    id: string
-    quantite: number
-    composant: {
-      id: string
-      name: string
-      reference: string | null
-      prix_vente: number
-      photo_url: string | null
-    } | null
-  }>
-  categories_produits: {
-    id: string
-    name: string
-    color: string | null
-  } | null
-}
-
-type Composant = {
-  id: string
-  name: string
-  reference: string | null
-  prix_vente: number
-  photo_url: string | null
-  is_active: boolean
-  poids: number | null
-  categorie_id: string | null
-  categorie: {
-    id: string
-    name: string
-    color: string | null
-  } | null
-}
+// Alias pour compatibilité
+type Composant = ComposantForProduit
 
 type SelectedComposant = {
   composant_id: string

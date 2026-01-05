@@ -9,51 +9,11 @@ import { ProduitModal } from "./ProduitModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { SearchIcon } from "@/components/ui/Icons";
 import { usePageHeader } from "@/contexts/PageHeaderContext";
+import type { Produit, ComposantForProduit, CategoryProduit } from "@/types";
 
-// Types
-interface Produit {
-  id: string;
-  name: string;
-  reference: string | null;
-  description: string | null;
-  photo_url: string | null;
-  categorie_id: string | null;
-  prix_heure: number | null;
-  nombre_heures: number | null;
-  prix_vente_total: number | null;
-  is_active: boolean | null;
-  created_at: string | null;
-  updated_at: string | null;
-  produits_composants: any[];
-  categories_produits: {
-    id: string;
-    name: string;
-    slug: string;
-    color: string | null;
-  } | null;
-}
-
-interface Composant {
-  id: string;
-  name: string;
-  reference: string | null;
-  prix_vente: number;
-  photo_url: string | null;
-  is_active: boolean;
-  poids: number | null;
-  categorie_id: string | null;
-  categorie: {
-    id: string;
-    name: string;
-    color: string | null;
-  } | null;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  color: string | null;
-}
+// Alias pour compatibilité
+type Composant = ComposantForProduit;
+type Category = CategoryProduit;
 
 interface ProduitsViewProps {
   initialProduits: Produit[];
@@ -214,6 +174,8 @@ export function ProduitsView({
       reference: p.reference,
       photo_url: p.photo_url,
       prix_vente_total: p.prix_vente_total,
+      prix_heure: p.prix_heure,
+      nombre_heures: p.nombre_heures,
       is_active: p.is_active,
       categorie_id: p.categorie_id,
       categories_produits: p.categories_produits,

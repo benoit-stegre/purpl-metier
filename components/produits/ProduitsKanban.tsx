@@ -3,42 +3,11 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Package, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import { WeightIcon } from "@/components/ui/Icons";
+import type { ProduitKanban, CategoryProduit } from "@/types";
 
-// Types
-interface Produit {
-  id: string;
-  name: string;
-  reference: string | null;
-  photo_url: string | null;
-  prix_vente_total: number | null;
-  prix_heure: number | null;
-  nombre_heures: number | null;
-  is_active: boolean | null;
-  categorie_id: string | null;
-  categories_produits: {
-    id: string;
-    name: string;
-    color: string | null;
-  } | null;
-  produits_composants?: Array<{
-    id: string;
-    quantite: number;
-    composant: {
-      id: string;
-      name: string;
-      reference: string | null;
-      prix_vente: number;
-      photo_url: string | null;
-      poids: number | null;
-    } | null;
-  }>;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  color: string | null;
-}
+// Alias pour compatibilité
+type Produit = ProduitKanban;
+type Category = CategoryProduit;
 
 interface ProduitsKanbanProps {
   produits: Produit[];

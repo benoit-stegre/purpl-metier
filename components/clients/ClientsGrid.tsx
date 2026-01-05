@@ -8,34 +8,7 @@ import { SearchIcon, UserIcon } from "@/components/ui/Icons";
 import { ClientModal } from "./ClientModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { usePageHeader } from "@/contexts/PageHeaderContext";
-
-// Type Client basé sur clients_pro
-interface Client {
-  id: string;
-  raison_sociale: string;
-  siret: string | null;
-  num_tva: string | null;
-  contact_nom: string | null;
-  contact_prenom: string | null;
-  contact_email: string | null;
-  contact_telephone: string | null;
-  adresse_ligne1: string | null;
-  adresse_ligne2: string | null;
-  ville: string | null;
-  code_postal: string | null;
-  pays: string | null;
-  categorie_id: string | null;
-  notes: string | null;
-  is_active: boolean | null;
-  created_at: string | null;
-  updated_at: string | null;
-  categories_clients: {
-    id: string;
-    name: string;
-    slug: string;
-    color: string | null;
-  } | null;
-}
+import type { Client } from "@/types";
 
 interface Contact {
   id: string;
