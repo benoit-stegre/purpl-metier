@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Package, Euro, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
+import { Package, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import { WeightIcon } from "@/components/ui/Icons";
 
 // Types
@@ -11,6 +11,8 @@ interface Produit {
   reference: string | null;
   photo_url: string | null;
   prix_vente_total: number | null;
+  prix_heure: number | null;
+  nombre_heures: number | null;
   is_active: boolean | null;
   categorie_id: string | null;
   categories_produits: {
@@ -164,13 +166,14 @@ function KanbanProduitCard({
   produit: Produit;
   onClick?: () => void;
 }) {
-  const formattedPrix = produit.prix_vente_total
-    ? produit.prix_vente_total.toLocaleString("fr-FR", {
-        style: "currency",
-        currency: "EUR",
-        minimumFractionDigits: 2,
-      })
-    : "0,00 €";
+  // Utiliser directement prix_vente_total de la BDD (calculé et sauvegardé correctement)
+  const prixVenteTotal = produit.prix_vente_total ?? 0
+
+  const formattedPrix = prixVenteTotal.toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+  })
 
   // Calcul du poids total = Σ (composant.poids × quantité)
   // Ignorer les composants sans poids (null, undefined, 0)
@@ -226,7 +229,6 @@ function KanbanProduitCard({
       {/* Prix */}
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
         <div className="flex items-center gap-1 text-sm font-medium text-[#76715A]">
-          <Euro className="w-4 h-4" />
           <span>{formattedPrix}</span>
         </div>
       </div>

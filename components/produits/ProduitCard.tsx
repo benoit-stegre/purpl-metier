@@ -67,7 +67,7 @@ export function ProduitCard({ produit, onEdit, onDelete }: ProduitCardProps) {
   
   const nbComposants = produit.produits_composants?.length || 0
   
-  // ✅ Sécurisation des champs numériques
+  // Utiliser directement prix_vente_total de la BDD (calculé et sauvegardé correctement)
   const prixVente = produit.prix_vente_total ?? 0
   
   // Calcul du poids total = Σ (composant.poids × quantité)

@@ -24,6 +24,7 @@ interface Projet {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  total_ht: number | null;
   categories_projets: {
     id: string;
     name: string;
@@ -339,6 +340,11 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
                       )}`}
                   </p>
                 )}
+
+                {/* Total HT */}
+                <p className="text-sm font-semibold mt-2" style={{ color: "#76715A" }}>
+                  Total HT : {(projet.total_ht ?? 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}
+                </p>
 
                 {/* Budget */}
                 {projet.budget && (

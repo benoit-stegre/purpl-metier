@@ -23,6 +23,7 @@ interface ProjetGrid {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  total_ht: number | null;
   categories_projets: {
     id: string;
     name: string;
@@ -131,24 +132,30 @@ export function ProjetsView({ projets, projetsDetails }: ProjetsViewProps) {
   const [localProjetsDetails, setLocalProjetsDetails] = useState(projetsDetails);
 
   // Mapper les données pour ProjetsGrid (adapte nom → name, statut → status)
-  const projetsForGrid: ProjetGrid[] = projets.map((p) => ({
-    id: p.id,
-    name: p.nom,
-    reference: p.reference,
-    description: p.description,
-    client_id: p.client_id,
-    status: (p.statut === "brouillon" ? "draft" : p.statut || "draft") as ProjetGrid["status"],
-    date_debut: p.date_debut,
-    date_fin: p.date_fin,
-    budget: p.budget,
-    photo_url: p.photo_url,
-    categorie_id: p.categorie_id,
-    is_active: p.is_active ?? true,
-    created_at: p.created_at || new Date().toISOString(),
-    updated_at: p.updated_at || new Date().toISOString(),
-    categories_projets: p.categories_projets,
-    clients_pro: p.clients_pro,
-  }));
+  const projetsForGrid: ProjetGrid[] = projets.map((p) => {
+    // Récupérer le total_ht depuis les détails du projet
+    const details = localProjetsDetails.find((d) => d.id === p.id);
+    
+    return {
+      id: p.id,
+      name: p.nom,
+      reference: p.reference,
+      description: p.description,
+      client_id: p.client_id,
+      status: (p.statut === "brouillon" ? "draft" : p.statut || "draft") as ProjetGrid["status"],
+      date_debut: p.date_debut,
+      date_fin: p.date_fin,
+      budget: p.budget,
+      photo_url: p.photo_url,
+      categorie_id: p.categorie_id,
+      is_active: p.is_active ?? true,
+      created_at: p.created_at || new Date().toISOString(),
+      updated_at: p.updated_at || new Date().toISOString(),
+      total_ht: details?.total_ht ?? null,
+      categories_projets: p.categories_projets,
+      clients_pro: p.clients_pro,
+    };
+  });
 
   // Mapper les données pour ProjetsKanban (utilise l'état local)
   const projetsForKanban: ProjetKanban[] = localProjetsDetails
