@@ -24,9 +24,11 @@ import { CSS } from "@dnd-kit/utilities";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 import { Calendar, Building2, Euro, GripVertical, Plus, X, FileText, ShoppingCart, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
+import { DuplicateIcon, DeleteIcon } from "@/components/ui/Icons";
 import { gererChangementStatut } from "@/lib/utils/projetPricing";
 import { exportProjetDevis, exportProjetCommande } from "@/lib/exports/projetExports";
 import { KanbanColumnHeader } from "./KanbanColumnHeader";
+import { ProjetCard } from "./ProjetCard";
 import type { StatutProjet } from "@/types/database.types";
 
 // Types
@@ -40,6 +42,7 @@ interface ProjetKanban {
   client_id: string | null;
   client_nom: string | null;
   total_ht: number | null;
+  total_revient?: number | null;
 }
 
 interface ProjetsKanbanProps {
@@ -48,6 +51,8 @@ interface ProjetsKanbanProps {
   onStatusChange?: () => void;
   onOptimisticStatusChange?: (projetId: string, newStatut: string) => void;
   onNewProjet?: () => void;
+  onDuplicate?: (projetId: string) => void;
+  onDelete?: (projetId: string) => void;
 }
 
 // Couleurs disponibles pour les nouvelles colonnes (charte PURPL)
@@ -60,6 +65,13 @@ const COLUMN_COLORS = [
   "#2F2F2E", // Noir PURPL - Texte
 ];
 
+// Couleurs PURPL pour boutons hover
+const COLORS = {
+  ivoire: "#FFFEF5",
+  olive: "#76715A",
+  rougeDoux: "#C23C3C",
+};
+
 // Statuts par défaut (fallback si BDD vide)
 const DEFAULT_STATUTS: StatutProjet[] = [
   { id: "default-brouillon", nom: "brouillon", couleur: "#6B7280", ordre: 0, is_system: true, created_at: "" },
@@ -70,163 +82,23 @@ const DEFAULT_STATUTS: StatutProjet[] = [
 
 // ============================================
 // Composant carte projet draggable
+// (Supprimé - utilise maintenant ProjetCard.tsx)
 // ============================================
-interface ProjetCardProps {
-  projet: ProjetKanban;
-  onClick?: () => void;
-  isDragging?: boolean;
-}
-
-function ProjetCard({ projet, onClick, isDragging }: ProjetCardProps) {
-  const [isExporting, setIsExporting] = useState<"devis" | "commande" | null>(null);
-
-  const formattedDate = projet.date_debut
-    ? new Date(projet.date_debut).toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : projet.created_at
-    ? new Date(projet.created_at).toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : null;
-
-  const formattedTotal = projet.total_ht
-    ? projet.total_ht.toLocaleString("fr-FR", {
-        style: "currency",
-        currency: "EUR",
-        minimumFractionDigits: 2,
-      })
-    : "0,00 €";
-
-  // Handler export devis
-  const handleExportDevis = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Empêche l'ouverture du modal
-    setIsExporting("devis");
-    
-    const result = await exportProjetDevis(projet.id);
-    
-    if (result.success) {
-      toast.success("Devis exporté avec succès");
-    } else {
-      toast.error(result.error || "Erreur lors de l'export");
-    }
-    
-    setIsExporting(null);
-  };
-
-  // Handler export commande
-  const handleExportCommande = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Empêche l'ouverture du modal
-    setIsExporting("commande");
-    
-    const result = await exportProjetCommande(projet.id);
-    
-    if (result.success) {
-      toast.success("Bon de commande exporté");
-    } else {
-      toast.error(result.error || "Erreur lors de l'export");
-    }
-    
-    setIsExporting(null);
-  };
-
-  return (
-    <div
-      onClick={onClick}
-      className={`
-        bg-white rounded-lg border border-gray-200 p-3 sm:p-4 cursor-pointer
-        hover:shadow-md hover:border-[#76715A]/30 
-        transition-all duration-200 ease-out
-        ${isDragging ? "shadow-2xl ring-2 ring-[#ED693A] scale-[1.02]" : ""}
-      `}
-    >
-      {/* Header avec grip */}
-      <div className="flex items-start gap-2">
-        <GripVertical className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 cursor-grab" />
-        <div className="flex-1 min-w-0">
-          {/* Nom du projet */}
-          <h3 className="font-semibold text-[#2F2F2E] truncate text-sm">
-            {projet.nom}
-          </h3>
-          {projet.reference && (
-            <p className="text-xs text-gray-500 truncate">
-              Réf: {projet.reference}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Client */}
-      {projet.client_nom && (
-        <div className="flex items-center gap-1.5 mt-3 text-sm text-gray-600">
-          <Building2 className="w-4 h-4 flex-shrink-0" />
-          <span className="truncate">{projet.client_nom}</span>
-        </div>
-      )}
-
-      {/* Footer : Total HT + Date */}
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-        {/* Total HT */}
-        <div className="flex items-center gap-1 text-sm font-medium text-[#76715A]">
-          <Euro className="w-4 h-4" />
-          <span>{formattedTotal}</span>
-        </div>
-
-        {/* Date */}
-        {formattedDate && (
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <Calendar className="w-3 h-3" />
-            <span>{formattedDate}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Boutons export */}
-      <div className="flex items-center gap-1.5 sm:gap-2 mt-3 pt-3 border-t border-gray-100">
-        <button
-          onClick={handleExportDevis}
-          disabled={isExporting !== null}
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 sm:px-2 py-1.5 text-xs font-medium text-[#76715A] bg-[#EDEAE3] rounded-md hover:bg-[#D6CCAF] transition-colors disabled:opacity-50"
-          title="Télécharger le devis"
-        >
-          {isExporting === "devis" ? (
-            <div className="w-3 h-3 border-2 border-[#76715A] border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          )}
-          <span className="hidden sm:inline">Devis</span>
-        </button>
-        <button
-          onClick={handleExportCommande}
-          disabled={isExporting !== null}
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 sm:px-2 py-1.5 text-xs font-medium text-white bg-[#ED693A] rounded-md hover:bg-[#d85a2a] transition-colors disabled:opacity-50"
-          title="Télécharger le bon de commande"
-        >
-          {isExporting === "commande" ? (
-            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          )}
-          <span className="hidden sm:inline">Commande</span>
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ============================================
 // Composant carte sortable (wrapper dnd-kit)
 // ============================================
 interface SortableProjetCardProps {
   projet: ProjetKanban;
+  columnStatut?: string; // Statut de la colonne (source de vérité pour le badge)
+  columnStatutColor?: string; // Couleur du statut de la colonne
+  columnStatutLabel?: string; // Label du statut de la colonne
   onClick?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
 }
 
-function SortableProjetCard({ projet, onClick }: SortableProjetCardProps) {
+function SortableProjetCard({ projet, columnStatut, columnStatutColor, columnStatutLabel, onClick, onDuplicate, onDelete }: SortableProjetCardProps) {
   const {
     attributes,
     listeners,
@@ -237,8 +109,8 @@ function SortableProjetCard({ projet, onClick }: SortableProjetCardProps) {
   } = useSortable({ 
     id: projet.id,
     transition: {
-      duration: 250, // ms
-      easing: 'cubic-bezier(0.25, 1, 0.5, 1)', // easeOutQuart pour fluidité
+      duration: 250,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
     },
   });
 
@@ -249,9 +121,31 @@ function SortableProjetCard({ projet, onClick }: SortableProjetCardProps) {
     zIndex: isDragging ? 100 : 'auto',
   } as React.CSSProperties;
 
+  // Utiliser le statut de la colonne si fourni (source de vérité dans le Kanban), sinon projet.statut
+  const statutToDisplay = columnStatut || projet.statut;
+
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ProjetCard projet={projet} onClick={onClick} isDragging={isDragging} />
+      <ProjetCard 
+        projet={{
+          id: projet.id,
+          nom: projet.nom,
+          reference: projet.reference,
+          statut: statutToDisplay, // Utiliser le statut de la colonne (source de vérité)
+          client_nom: projet.client_nom,
+          total_ht: projet.total_ht,
+          total_revient: projet.total_revient,
+          date_debut: projet.date_debut,
+          created_at: projet.created_at,
+        }}
+        variant="kanban"
+        onClick={onClick} 
+        isDragging={isDragging}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        statutColor={columnStatutColor} // Passer la couleur du statut de la colonne
+        statutLabel={columnStatutLabel} // Passer le label du statut de la colonne
+      />
     </div>
   );
 }
@@ -266,6 +160,8 @@ interface SortableKanbanColumnProps {
   onRename: (id: string, newName: string) => void;
   onChangeColor: (id: string, newColor: string) => void;
   onDelete: (id: string) => void;
+  onDuplicate?: (projetId: string) => void;
+  onDeleteProjet?: (projetId: string) => void;
 }
 
 function SortableKanbanColumn({
@@ -275,6 +171,8 @@ function SortableKanbanColumn({
   onRename,
   onChangeColor,
   onDelete,
+  onDuplicate,
+  onDeleteProjet,
 }: SortableKanbanColumnProps) {
   const {
     attributes,
@@ -403,7 +301,12 @@ function SortableKanbanColumn({
               <SortableProjetCard
                 key={projet.id}
                 projet={projet}
+                columnStatut={statut.nom} // Passer le statut de la colonne (source de vérité pour le badge)
+                columnStatutColor={statut.couleur} // Passer la couleur du statut de la colonne
+                columnStatutLabel={statut.nom.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())} // Formater le nom du statut pour le label
                 onClick={() => onProjetClick?.(projet.id)}
+                onDuplicate={() => onDuplicate?.(projet.id)}
+                onDelete={() => onDeleteProjet?.(projet.id)}
               />
             ))
           )}
@@ -539,6 +442,8 @@ export function ProjetsKanban({
   onStatusChange,
   onOptimisticStatusChange,
   onNewProjet,
+  onDuplicate,
+  onDelete,
 }: ProjetsKanbanProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<"projet" | "column" | null>(null);
@@ -718,18 +623,7 @@ export function ProjetsKanban({
     // Mettre à jour la BDD en arrière-plan (sans bloquer l'UI)
     (async () => {
       try {
-        // 1. Gérer le figement/défigement des prix AVANT le changement de statut
-        const figementResult = await gererChangementStatut(
-          activeProjetId,
-          currentColumn || "brouillon",
-          targetColumn
-        );
-
-        if (!figementResult.success) {
-          throw new Error(figementResult.error || "Erreur lors du figement des prix");
-        }
-
-        // 2. Mettre à jour le statut du projet
+        // 1. Mettre à jour le statut du projet EN PREMIER (priorité métier)
         const { error } = await supabase
           .from("projets")
           .update({ statut: targetColumn, updated_at: new Date().toISOString() })
@@ -739,6 +633,22 @@ export function ProjetsKanban({
 
         const targetLabel = columns.find((c) => c.nom === targetColumn)?.nom.replace(/_/g, " ").toUpperCase() || targetColumn;
         toast.success(`Projet déplacé vers "${targetLabel}"`);
+
+        // 2. Gérer le figement/défigement des prix APRÈS (best-effort, non-bloquant)
+        try {
+          const figementResult = await gererChangementStatut(
+            activeProjetId,
+            currentColumn || "brouillon",
+            targetColumn
+          );
+
+          if (!figementResult.success) {
+            console.warn("Avertissement figement prix:", figementResult.error);
+            toast.error("Attention : les prix n'ont pas pu être figés/défigés");
+          }
+        } catch (figementError) {
+          console.warn("Erreur figement prix (non-bloquant):", figementError);
+        }
 
         // Soft refresh pour synchroniser les données serveur
         onStatusChange?.();
@@ -1078,6 +988,8 @@ export function ProjetsKanban({
                 onRename={handleRenameColumn}
                 onChangeColor={handleChangeColor}
                 onDelete={handleDeleteColumn}
+                onDuplicate={onDuplicate}
+                onDeleteProjet={onDelete}
               />
             ))}
 
@@ -1097,7 +1009,21 @@ export function ProjetsKanban({
         {/* Overlay pendant le drag */}
         <DragOverlay>
           {activeProjet ? (
-            <ProjetCard projet={activeProjet} isDragging />
+            <ProjetCard 
+              projet={{
+                id: activeProjet.id,
+                nom: activeProjet.nom,
+                reference: activeProjet.reference,
+                statut: activeProjet.statut,
+                client_nom: activeProjet.client_nom,
+                total_ht: activeProjet.total_ht,
+                total_revient: activeProjet.total_revient,
+                date_debut: activeProjet.date_debut,
+                created_at: activeProjet.created_at,
+              }}
+              variant="kanban"
+              isDragging={true}
+            />
           ) : activeColumn ? (
             <div
               className="min-w-[280px] max-w-[350px] rounded-lg shadow-2xl"

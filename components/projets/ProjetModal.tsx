@@ -13,9 +13,22 @@ import {
   PlusIcon,
   ToolIcon,
 } from "@/components/ui/Icons";
-import { AlertTriangle, Check, Lock } from "lucide-react";
+import { AlertTriangle, Check, Lock, Trash2, X } from "lucide-react";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import type { ProduitMinimal, ClientMinimal, CategoryProjet } from "@/types";
+import type { StatutProjet } from "@/types/database.types";
+
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  ecru: "#EDEAE3", 
+  noir: "#2F2F2E",
+  olive: "#76715A",
+  orangeDoux: "#E77E55",
+  orangeChaud: "#ED693A",
+  rougeDoux: "#C23C3C",
+  vertDoux: "#409143",
+};
 
 interface Projet {
   id: string;
@@ -23,7 +36,7 @@ interface Projet {
   reference: string | null;
   description: string | null;
   client_id: string | null;
-  statut: "brouillon" | "en_cours" | "termine" | "annule";
+  statut: string; // Statut dynamique depuis statuts_projet
   date_debut: string | null;
   date_fin: string | null;
   budget: number | null;
@@ -49,20 +62,23 @@ type SelectedProduit = {
 interface ProjetModalProps {
   mode: "create" | "edit";
   projet?: Projet;
+  duplicateFromId?: string; // ID du projet à dupliquer
   onClose: () => void;
   onSuccess: () => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: "brouillon", label: "Brouillon", color: "#6B7280" },
-  { value: "en_cours", label: "En cours", color: "#3B82F6" },
-  { value: "termine", label: "Terminé", color: "#10B981" },
-  { value: "annule", label: "Annulé", color: "#EF4444" },
+// Statuts par défaut (fallback si BDD vide)
+const DEFAULT_STATUTS: StatutProjet[] = [
+  { id: "default-brouillon", nom: "brouillon", couleur: "#6B7280", ordre: 0, is_system: true, created_at: "" },
+  { id: "default-en_cours", nom: "en_cours", couleur: "#3B82F6", ordre: 1, is_system: false, created_at: "" },
+  { id: "default-termine", nom: "termine", couleur: "#10B981", ordre: 2, is_system: false, created_at: "" },
+  { id: "default-annule", nom: "annule", couleur: "#EF4444", ordre: 3, is_system: false, created_at: "" },
 ];
 
 export function ProjetModal({
   mode,
   projet,
+  duplicateFromId,
   onClose,
   onSuccess,
 }: ProjetModalProps) {
@@ -71,18 +87,26 @@ export function ProjetModal({
     reference: "",
     description: "",
     client_id: null as string | null,
-    statut: "brouillon" as "brouillon" | "en_cours" | "termine" | "annule",
+    statut: "brouillon", // Statut dynamique depuis statuts_projet
     date_debut: "",
     date_fin: "",
     budget: "",
     categorie_id: null as string | null,
   });
 
+  // State pour les statuts dynamiques
+  const [statuts, setStatuts] = useState<StatutProjet[]>(DEFAULT_STATUTS);
+
   const [originalData, setOriginalData] = useState(formData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  // State pour popup de confirmation (retrait produit ou suppression projet)
+  const [confirmationModal, setConfirmationModal] = useState<{
+    type: "delete-project" | "delete-product"
+    productIndex?: number
+    productName?: string
+  } | null>(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -99,22 +123,53 @@ export function ProjetModal({
   const [produitSearch, setProduitSearch] = useState("");
   const [availableProduits, setAvailableProduits] = useState<Produit[]>([]);
 
-  // Charger catégories, clients et produits au mount
+  // Charger les statuts depuis statuts_projet
+  const loadStatuts = async () => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("statuts_projet")
+        .select("*")
+        .order("ordre");
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setStatuts(data as StatutProjet[]);
+        // Si le statut actuel n'existe pas dans les nouveaux statuts, utiliser le premier
+        if (formData.statut && !data.some((s) => s.nom === formData.statut)) {
+          setFormData((prev) => ({ ...prev, statut: data[0].nom }));
+        }
+      } else {
+        setStatuts(DEFAULT_STATUTS);
+      }
+    } catch (error) {
+      console.error("Erreur chargement statuts:", error);
+      setStatuts(DEFAULT_STATUTS);
+    }
+  };
+
+  // Charger catégories, clients, produits et statuts au mount
   useEffect(() => {
     loadCategories();
     loadClients();
     loadProduits();
+    loadStatuts();
   }, []);
 
-  // Charger les données du projet en mode édition
+  // Charger les données du projet en mode édition ou duplication
   useEffect(() => {
-    if (mode === "edit" && projet) {
+    if ((mode === "edit" || duplicateFromId) && projet) {
+      // Vérifier si le statut du projet existe dans les statuts chargés
+      const statutExiste = statuts.some((s) => s.nom === projet.statut);
+      const statutAUtiliser = statutExiste ? projet.statut : (statuts[0]?.nom || "brouillon");
+      
       const loadedData = {
         nom: projet.nom || "",
         reference: projet.reference || "",
         description: projet.description || "",
         client_id: projet.client_id || null,
-        statut: projet.statut || "brouillon",
+        statut: statutAUtiliser,
         date_debut: projet.date_debut
           ? new Date(projet.date_debut).toISOString().split("T")[0]
           : "",
@@ -128,7 +183,8 @@ export function ProjetModal({
       setFormData(loadedData);
       setOriginalData(loadedData);
 
-      if (projet.photo_url) {
+      if (projet.photo_url && mode === "edit") {
+        // En mode duplicate, ne pas copier la photo
         setPhotoPreview(projet.photo_url);
         setOriginalPhotoUrl(projet.photo_url);
       } else {
@@ -136,16 +192,17 @@ export function ProjetModal({
         setOriginalPhotoUrl(null);
       }
       
-      // Charger produits existants du projet
-      if (projet.id) {
-        loadProjetProduits(projet.id);
+      // Charger les produits du projet source (edit ou duplicate)
+      const sourceProjetId = duplicateFromId || projet.id;
+      if (sourceProjetId) {
+        loadProjetProduits(sourceProjetId);
       }
     } else {
       resetForm();
       setSelectedProduits([]);
       setOriginalSelectedProduits([]);
     }
-  }, [mode, projet]);
+  }, [mode, projet, duplicateFromId, statuts]);
 
   const loadCategories = async () => {
     try {
@@ -191,18 +248,43 @@ export function ProjetModal({
       const supabase = createClient();
       const { data, error } = await supabase
         .from("produits")
-        .select("id, name, reference, prix_vente_total, photo_url, is_active")
+        .select(`
+          id, 
+          name, 
+          reference, 
+          prix_vente_total, 
+          photo_url, 
+          is_active,
+          prix_heure,
+          nombre_heures,
+          produits_composants (
+            quantite,
+            composant:composants (
+              prix_achat
+            )
+          )
+        `)
         .order("name");
 
       if (error) throw error;
-      if (data) setAvailableProduits(data.map(produit => ({
-        id: produit.id,
-        name: produit.name,
-        reference: produit.reference,
-        prix_vente_total: produit.prix_vente_total,
-        photo_url: produit.photo_url,
-        is_active: produit.is_active ?? true,
-      })));
+      if (data) setAvailableProduits(data.map(produit => {
+        // Calculer le prix de revient du produit
+        const coutComposants = produit.produits_composants?.reduce((sum: number, pc: any) => {
+          return sum + (pc.quantite * (pc.composant?.prix_achat || 0));
+        }, 0) || 0;
+        const coutMainOeuvre = (produit.prix_heure || 0) * (produit.nombre_heures || 0);
+        const prixRevient = coutComposants + coutMainOeuvre;
+
+        return {
+          id: produit.id,
+          name: produit.name,
+          reference: produit.reference,
+          prix_vente_total: produit.prix_vente_total,
+          photo_url: produit.photo_url,
+          is_active: produit.is_active ?? true,
+          prix_revient: prixRevient,
+        };
+      }));
     } catch (error) {
       console.error("Erreur chargement produits:", error);
       toast.error("Erreur lors du chargement des produits");
@@ -218,16 +300,41 @@ export function ProjetModal({
       if (produits.length === 0) {
         const { data: produitsData } = await supabase
           .from("produits")
-          .select("id, name, reference, prix_vente_total, photo_url, is_active")
+          .select(`
+            id, 
+            name, 
+            reference, 
+            prix_vente_total, 
+            photo_url, 
+            is_active,
+            prix_heure,
+            nombre_heures,
+            produits_composants (
+              quantite,
+              composant:composants (
+                prix_achat
+              )
+            )
+          `)
           .order("name");
-        produits = (produitsData || []).map(produit => ({
-          id: produit.id,
-          name: produit.name,
-          reference: produit.reference,
-          prix_vente_total: produit.prix_vente_total,
-          photo_url: produit.photo_url,
-          is_active: produit.is_active ?? true,
-        }));
+        produits = (produitsData || []).map((produit: any) => {
+          // Calculer le prix de revient du produit
+          const coutComposants = produit.produits_composants?.reduce((sum: number, pc: any) => {
+            return sum + (pc.quantite * (pc.composant?.prix_achat || 0));
+          }, 0) || 0;
+          const coutMainOeuvre = (produit.prix_heure || 0) * (produit.nombre_heures || 0);
+          const prixRevient = coutComposants + coutMainOeuvre;
+
+          return {
+            id: produit.id,
+            name: produit.name,
+            reference: produit.reference,
+            prix_vente_total: produit.prix_vente_total,
+            photo_url: produit.photo_url,
+            is_active: produit.is_active ?? true,
+            prix_revient: prixRevient,
+          };
+        });
         setAvailableProduits(produits);
       }
       
@@ -419,7 +526,7 @@ export function ProjetModal({
       reference: "",
       description: "",
       client_id: null as string | null,
-      statut: "brouillon" as "brouillon" | "en_cours" | "termine" | "annule",
+      statut: statuts[0]?.nom || "brouillon",
       date_debut: "",
       date_fin: "",
       budget: "",
@@ -483,11 +590,41 @@ export function ProjetModal({
     );
   };
 
+  const handleRemoveProduitByIndex = (index: number) => {
+    if (index >= 0 && index < selectedProduits.length) {
+      const produitId = selectedProduits[index].produit_id;
+      handleRemoveProduit(produitId);
+    }
+  };
+
   // Calcul total HT projet (utilise le prix figé si disponible, sinon le prix dynamique)
   const totalHT = selectedProduits.reduce((total, sp) => {
     const prixUnitaire = sp.prix_unitaire_fige ?? sp.produit.prix_vente_total ?? 0;
     return total + (prixUnitaire * sp.quantite);
   }, 0);
+
+  // Calcul du prix de revient total
+  const totalRevient = selectedProduits.reduce((total, sp) => {
+    const prixRevient = sp.produit.prix_revient ?? 0;
+    return total + prixRevient * sp.quantite;
+  }, 0);
+
+  // Calcul de la marge
+  const margeEuros = totalHT - totalRevient;
+  const margePourcent = totalRevient > 0 ? (margeEuros / totalRevient) * 100 : 0;
+
+  // Couleur du badge marge selon le pourcentage
+  const getMargeBadgeColor = (percent: number) => {
+    if (percent > 30) return COLORS.vertDoux;
+    if (percent > 15) return COLORS.orangeDoux;
+    if (percent > 0) return COLORS.orangeChaud;
+    return COLORS.rougeDoux;
+  };
+
+  // Couleur de la marge € (vert si positive, rouge si négative)
+  const getMargeColor = (value: number) => {
+    return value >= 0 ? COLORS.vertDoux : COLORS.rougeDoux;
+  };
 
   // Filtrage produits pour le sélecteur
   const filteredProduits = availableProduits.filter(
@@ -556,7 +693,11 @@ export function ProjetModal({
 
       let projetId: string;
 
-      if (mode === "edit" && projet) {
+      // Si on est en mode édition ET qu'on n'est pas en train de dupliquer → UPDATE
+      // Sinon (création ou duplication) → INSERT
+      const isEditMode = mode === "edit" && projet && !duplicateFromId;
+      
+      if (isEditMode) {
         const { error } = await supabase
           .from("projets")
           .update(dataToSave)
@@ -575,11 +716,12 @@ export function ProjetModal({
         if (error) throw error;
         if (!insertData) throw new Error("Projet créé mais ID non retourné");
         projetId = insertData.id;
-        toast.success("Projet créé avec succès");
+        toast.success(duplicateFromId ? "Projet dupliqué avec succès" : "Projet créé avec succès");
       }
 
       // Gérer les produits du projet
-      if (mode === "edit" && projet) {
+      // En mode édition, supprimer les anciens produits avant d'insérer les nouveaux
+      if (isEditMode) {
         // Supprimer anciens produits
         const { error: deleteError } = await supabase
           .from("projets_produits")
@@ -663,7 +805,7 @@ export function ProjetModal({
       toast.error(error.message || "Erreur lors de la suppression");
     } finally {
       setIsSubmitting(false);
-      setShowDeleteConfirm(false);
+      setConfirmationModal(null);
     }
   };
 
@@ -674,579 +816,907 @@ export function ProjetModal({
         onClick={handleOverlayClick}
         className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       >
-        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="flex justify-between items-center p-4 sm:p-6 border-b">
-            <h2
-              className="text-2xl font-bold"
-              style={{ color: "#76715A" }}
-            >
-              {mode === "edit" ? "Modifier le projet" : "Nouveau projet"}
-            </h2>
-            <button
-              onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
-              type="button"
-            >
-              <CloseIcon className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
-            {/* Section Photo */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Photo
-              </label>
-              <div className="flex items-center gap-4">
-                <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                  {photoPreview ? (
-                    <img
-                      src={photoPreview}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon className="w-6 h-6 text-gray-400" />
-                  )}
-                </div>
-                <div className="flex-1">
+        <div 
+          className="rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+          style={{ backgroundColor: COLORS.ivoire }}
+        >
+          {/* ===== HEADER FIXE ===== */}
+          <div 
+            className="flex-shrink-0 p-6"
+            style={{ borderBottom: `1px solid ${COLORS.ecru}` }}
+          >
+            <div className="flex items-start justify-between gap-6">
+              {/* Photo + Titre */}
+              <div className="flex items-center gap-6">
+                {/* Photo Upload */}
+                <div className="flex-shrink-0">
+                  <div 
+                    className="w-32 h-32 rounded-lg flex items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: COLORS.ecru }}
+                  >
+                    {photoPreview ? (
+                      <img
+                        src={photoPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span style={{ color: COLORS.olive }}>
+                        <ImageIcon className="w-10 h-10" />
+                      </span>
+                    )}
+                  </div>
+                  {/* Input file caché */}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
                         setPhotoFile(file);
                         setPhotoPreview(URL.createObjectURL(file));
-                        handlePhotoUpload(file);
                       }
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
+                    className="hidden"
+                    id="photo-input-projet"
                   />
-                  {photoPreview && (
-                    <button
-                      type="button"
-                      onClick={handlePhotoDelete}
-                      className="mt-2 text-sm text-red-600 hover:text-red-800"
+                  {/* Bouton Parcourir */}
+                  <label
+                    htmlFor="photo-input-projet"
+                    className="mt-2 w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity hover:opacity-90 cursor-pointer block text-center"
+                    style={{ backgroundColor: COLORS.olive }}
+                  >
+                    Parcourir
+                  </label>
+                </div>
+                
+                {/* Titre + Référence */}
+                <div>
+                  <h2 
+                    className="text-2xl font-bold"
+                    style={{ color: COLORS.noir }}
+                  >
+                    {formData.nom || (mode === "edit" ? "Modifier le projet" : "Nouveau projet")}
+                  </h2>
+                  {mode === "edit" && projet?.reference && (
+                    <p 
+                      className="text-sm mt-1"
+                      style={{ color: COLORS.olive }}
                     >
-                      Supprimer la photo
-                    </button>
+                      ID: {projet.reference}
+                    </p>
                   )}
                 </div>
               </div>
+              
+              {/* Bouton fermer */}
+              <button
+                onClick={handleClose}
+                className="p-2 hover:opacity-70 transition-opacity"
+                style={{ color: COLORS.olive }}
+                type="button"
+              >
+                <CloseIcon className="w-6 h-6" />
+              </button>
             </div>
+          </div>
 
-            {/* Section Nom & Référence */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.nom}
-                  onChange={(e) =>
-                    setFormData({ ...formData, nom: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                />
-                {errors.nom && (
-                  <p className="text-red-500 text-sm mt-1">{errors.nom}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Référence
-                </label>
-                <input
-                  type="text"
-                  value={formData.reference}
-                  onChange={(e) =>
-                    setFormData({ ...formData, reference: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                />
-              </div>
-            </div>
-
-            {/* Section Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-              />
-            </div>
-
-            {/* Section Client & Status */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client *
-                </label>
-                <select
-                  value={formData.client_id || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      client_id: e.target.value || null,
-                    })
-                  }
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A] ${
-                    errors.client_id ? 'border-red-500' : 'border-gray-300'
-                  }`}
+          {/* ===== CONTENU SCROLLABLE ===== */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* ===== SECTION: Informations générales ===== */}
+              <section>
+                <h3 
+                  className="text-lg font-semibold pb-3 mb-4"
+                  style={{ 
+                    color: COLORS.olive,
+                    borderBottom: `1px solid ${COLORS.ecru}`
+                  }}
                 >
-                  <option value="">Sélectionner un client...</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.client_id && (
-                  <p className="text-red-500 text-sm mt-1">{errors.client_id}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Statut
-                </label>
-                <select
-                  value={formData.statut}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      statut: e.target.value as
-                        | "brouillon"
-                        | "en_cours"
-                        | "termine"
-                        | "annule",
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                >
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Section Dates & Budget */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date de début
-                </label>
-                <input
-                  type="date"
-                  value={formData.date_debut}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_debut: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date de fin
-                </label>
-                <input
-                  type="date"
-                  value={formData.date_fin}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_fin: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                />
-                {errors.date_fin && (
-                  <p className="text-red-500 text-sm mt-1">
-                    {errors.date_fin}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Budget (€)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.budget}
-                  onChange={(e) =>
-                    setFormData({ ...formData, budget: e.target.value })
-                  }
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
-                />
-                {errors.budget && (
-                  <p className="text-red-500 text-sm mt-1">{errors.budget}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Section Produits */}
-            <div className="border-2 border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-gray-800">
-                  Produits ({selectedProduits.length})
+                  Informations générales
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowProduitSelector(!showProduitSelector)}
-                  className="px-4 py-2 bg-[#ED693A] text-white rounded-md hover:bg-[#d85a2a] transition-colors flex items-center gap-2"
+                
+                {/* Nom */}
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Nom du projet *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.nom}
+                    onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
+                    style={{ 
+                      borderColor: errors.nom ? COLORS.rougeDoux : COLORS.ecru,
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.noir
+                    }}
+                    placeholder="Ex: Aménagement Place Kléber"
+                  />
+                  {errors.nom && (
+                    <p className="text-sm mt-1" style={{ color: COLORS.rougeDoux }}>
+                      {errors.nom}
+                    </p>
+                  )}
+                </div>
+                
+                {/* Référence */}
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Référence
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.reference}
+                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                    style={{ 
+                      borderColor: COLORS.ecru,
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.noir
+                    }}
+                    placeholder="Ex: PRJ-2025-001"
+                  />
+                </div>
+                
+                {/* Description */}
+                <div>
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={2}
+                    className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none resize-y"
+                    style={{ 
+                      borderColor: COLORS.ecru,
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.noir
+                    }}
+                    placeholder="Description du projet..."
+                  />
+                </div>
+              </section>
+
+              {/* ===== SECTION: Client & Statut ===== */}
+              <section 
+                className="p-6 rounded-lg border"
+                style={{ borderColor: COLORS.ecru }}
+              >
+                <h3 
+                  className="text-lg font-semibold mb-4"
+                  style={{ color: COLORS.olive }}
                 >
-                  <PlusIcon className="w-4 h-4" />
-                  Ajouter un produit
-                </button>
-              </div>
-
-              {/* Liste produits sélectionnés */}
-              {selectedProduits.length > 0 ? (
-                <div className="space-y-2 mb-4">
-                  {selectedProduits.map((sp) => (
-                    <div
-                      key={sp.produit_id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                  Client & Statut
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Client */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
                     >
-                      {/* Photo miniature */}
-                      <div className="w-12 h-12 bg-white rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {sp.produit.photo_url ? (
-                          <img
-                            src={sp.produit.photo_url}
-                            alt={sp.produit.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <ToolIcon className="w-6 h-6 text-gray-400" />
-                        )}
-                      </div>
-
-                      {/* Nom + Référence */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 truncate">
-                          {sp.produit.name}
-                        </p>
-                        {sp.produit.reference && (
-                          <p className="text-xs text-gray-500">
-                            Réf: {sp.produit.reference}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Prix unitaire */}
-                      <div className="text-right">
-                        <p className={`text-sm ${sp.prix_unitaire_fige ? 'text-amber-700' : 'text-gray-800'}`}>
-                          {(sp.prix_unitaire_fige ?? sp.produit.prix_vente_total ?? 0).toFixed(2)} €
-                        </p>
-                        <p className="text-xs text-gray-500 flex items-center gap-1">
-                          {sp.prix_unitaire_fige && <Lock className="w-3 h-3" />}
-                          <span>{sp.prix_unitaire_fige ? 'figé' : 'unitaire'}</span>
-                        </p>
-                      </div>
-
-                      {/* Quantité */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateQuantite(sp.produit_id, sp.quantite - 1)
-                          }
-                          className="w-8 h-8 bg-white rounded border border-gray-300 hover:bg-gray-100 transition-colors flex items-center justify-center"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={sp.quantite}
-                          onChange={(e) =>
-                            handleUpdateQuantite(
-                              sp.produit_id,
-                              parseInt(e.target.value) || 1
-                            )
-                          }
-                          className="w-16 text-center px-2 py-1 border-2 border-gray-300 rounded"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateQuantite(sp.produit_id, sp.quantite + 1)
-                          }
-                          className="w-8 h-8 bg-white rounded border border-gray-300 hover:bg-gray-100 transition-colors flex items-center justify-center"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Total */}
-                      <div className="text-right w-24">
-                        <p className={`font-semibold ${sp.prix_unitaire_fige ? 'text-amber-700' : 'text-[#76715A]'}`}>
-                          {(
-                            (sp.prix_unitaire_fige ?? sp.produit.prix_vente_total ?? 0) * sp.quantite
-                          ).toFixed(2)}{" "}
-                          €
-                        </p>
-                      </div>
-
-                      {/* Supprimer */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProduit(sp.produit_id)}
-                        className="p-2 hover:bg-red-100 rounded transition-colors"
-                        title="Retirer"
-                      >
-                        <DeleteIcon className="w-5 h-5 text-red-600" />
-                      </button>
+                      Client *
+                    </label>
+                    <select
+                      value={formData.client_id || ""}
+                      onChange={(e) => setFormData({ ...formData, client_id: e.target.value || null })}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: errors.client_id ? COLORS.rougeDoux : COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
+                    >
+                      <option value="">Sélectionner un client...</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.client_id && (
+                      <p className="text-sm mt-1" style={{ color: COLORS.rougeDoux }}>
+                        {errors.client_id}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Statut */}
+                  <div>
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Statut
+                  </label>
+                    <select
+                      value={formData.statut}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        statut: e.target.value
+                      })}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
+                    >
+                      {statuts.map((status) => (
+                        <option key={status.id} value={status.nom}>
+                          {status.nom.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    {/* Preview pastille couleur statut */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{
+                          backgroundColor: statuts.find((s) => s.nom === formData.statut)?.couleur || "#6B7280",
+                        }}
+                      />
+                      <span className="text-sm" style={{ color: COLORS.olive }}>
+                        {statuts.find((s) => s.nom === formData.statut)?.nom.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || formData.statut}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 text-center py-4">
-                  Aucun produit sélectionné
-                </p>
-              )}
-
-              {/* Total HT */}
-              {selectedProduits.length > 0 && (
-                <div className="pt-3 border-t border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-800">
-                      Total HT :
-                    </span>
-                    <span className="text-xl font-bold text-[#76715A]">
-                      {totalHT.toFixed(2)} €
-                    </span>
                   </div>
                 </div>
-              )}
+              </section>
 
-              {/* Sélecteur produits (popup) */}
-              {showProduitSelector && (
-                <div className="mt-4 p-4 bg-white border-2 border-[#ED693A] rounded-lg">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-medium text-gray-800">
-                      Bibliothèque produits
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => setShowProduitSelector(false)}
-                      className="text-gray-500 hover:text-gray-700"
+              {/* ===== SECTION: Planning & Budget ===== */}
+              <section 
+                className="p-6 rounded-lg border"
+                style={{ borderColor: COLORS.ecru }}
+              >
+                <h3 
+                  className="text-lg font-semibold mb-4"
+                  style={{ color: COLORS.olive }}
+                >
+                  Planning & Budget
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Date début */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
                     >
-                      <CloseIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Recherche */}
-                  <div className="relative mb-3">
-                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      Date de début
+                    </label>
                     <input
-                      type="text"
-                      value={produitSearch}
-                      onChange={(e) => setProduitSearch(e.target.value)}
-                      placeholder="Rechercher un produit..."
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#ED693A]"
+                      type="date"
+                      value={formData.date_debut}
+                      onChange={(e) => setFormData({ ...formData, date_debut: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
                     />
                   </div>
-
-                  {/* Liste produits disponibles */}
-                  <div className="max-h-60 overflow-y-auto space-y-2">
-                    {filteredProduits.map((prod) => {
-                      const isSelected = selectedProduits.some(
-                        (sp) => sp.produit_id === prod.id
-                      );
-
-                      return (
-                        <button
-                          key={prod.id}
-                          type="button"
-                          onClick={() => handleAddProduit(prod)}
-                          className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left ${
-                            isSelected
-                              ? "bg-[#EDEAE3] border border-[#ED693A]"
-                              : "hover:bg-gray-50 border border-transparent"
-                          }`}
-                        >
-                          <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {prod.photo_url ? (
-                              <img
-                                src={prod.photo_url}
-                                alt={prod.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <ToolIcon className="w-5 h-5 text-gray-400" />
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-800 truncate flex items-center gap-2">
-                              {prod.name}
-                              {isSelected && (
-                                <Check className="w-4 h-4 text-[#76715A]" />
-                              )}
-                            </p>
-                            {prod.reference && (
-                              <p className="text-xs text-gray-500">
-                                Réf: {prod.reference}
-                              </p>
-                            )}
-                          </div>
-
-                          <p className="text-sm font-semibold text-[#76715A]">
-                            {(prod.prix_vente_total || 0).toFixed(2)} €
-                          </p>
-                        </button>
-                      );
-                    })}
-
-                    {filteredProduits.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-4">
-                        Aucun produit trouvé
+                  
+                  {/* Date fin */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Date de fin
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.date_fin}
+                      onChange={(e) => setFormData({ ...formData, date_fin: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: errors.date_fin ? COLORS.rougeDoux : COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
+                    />
+                    {errors.date_fin && (
+                      <p className="text-sm mt-1" style={{ color: COLORS.rougeDoux }}>
+                        {errors.date_fin}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Budget */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Budget client (€)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.budget}
+                      onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: errors.budget ? COLORS.rougeDoux : COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
+                    />
+                    {errors.budget && (
+                      <p className="text-sm mt-1" style={{ color: COLORS.rougeDoux }}>
+                        {errors.budget}
                       </p>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
+              </section>
 
-            {/* Section Catégorie */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Catégorie
-              </label>
-              <select
-                value={formData.categorie_id || ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === "__manage__") {
-                    setShowCategoryManager(true);
-                    return;
-                  }
-                  setFormData({
-                    ...formData,
-                    categorie_id: value || null,
-                  });
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#76715A]"
+              {/* ===== SECTION: Produits ===== */}
+              <section 
+                className="p-6 rounded-lg border"
+                style={{ borderColor: COLORS.ecru }}
               >
-                <option value="">Aucune catégorie</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
+                {/* Header : Titre + Badge compteur (PAS de bouton ici !) */}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 
+                    className="text-lg font-semibold"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Produits
+                  </h3>
+                  <span 
+                    className="px-3 py-1 rounded text-sm font-semibold text-white"
+                    style={{ backgroundColor: COLORS.olive }}
+                  >
+                    {selectedProduits.length}
+                  </span>
+                </div>
+
+                {/* Liste produits sélectionnés */}
+                {selectedProduits.length > 0 ? (
+                  <div className="space-y-2 mb-4">
+                    {selectedProduits.map((sp, index) => (
+                      <div
+                        key={sp.produit_id}
+                        className="flex items-center gap-4 p-3 rounded-lg"
+                        style={{ backgroundColor: COLORS.ecru }}
+                      >
+                        {/* Photo */}
+                        <div 
+                          className="w-12 h-12 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0"
+                          style={{ backgroundColor: COLORS.olive }}
+                        >
+                          {sp.produit.photo_url ? (
+                            <img
+                              src={sp.produit.photo_url}
+                              alt={sp.produit.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ToolIcon className="w-6 h-6 text-white" />
+                          )}
+                        </div>
+
+                        {/* Nom + Référence */}
+                        <div className="flex-1 min-w-0">
+                          <p 
+                            className="font-medium truncate"
+                            style={{ color: COLORS.noir }}
+                          >
+                            {sp.produit.name}
+                          </p>
+                          {sp.produit.reference && (
+                            <p className="text-xs" style={{ color: COLORS.olive }}>
+                              {sp.produit.reference}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Prix unitaire */}
+                        <div className="text-right">
+                          <p 
+                            className="text-xs flex items-center justify-end gap-1"
+                            style={{ color: COLORS.olive }}
+                          >
+                            {sp.prix_unitaire_fige && <Lock className="w-3 h-3" />}
+                            <span>{sp.prix_unitaire_fige ? 'figé' : 'Prix unitaire'}</span>
+                          </p>
+                          <p 
+                            className="text-sm font-medium"
+                            style={{ color: sp.prix_unitaire_fige ? '#B45309' : COLORS.noir }}
+                          >
+                            {(sp.prix_unitaire_fige ?? sp.produit.prix_vente_total ?? 0).toFixed(2)} €
+                          </p>
+                        </div>
+
+                        {/* Quantité avec boutons +/- */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantite(sp.produit_id, sp.quantite - 1)}
+                            className="w-8 h-8 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                            style={{ backgroundColor: COLORS.orangeDoux }}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            value={sp.quantite}
+                            onChange={(e) => handleUpdateQuantite(sp.produit_id, parseInt(e.target.value) || 1)}
+                            className="w-14 text-center py-1 rounded border-2 focus:outline-none"
+                            style={{ 
+                              borderColor: COLORS.ecru,
+                              backgroundColor: COLORS.ivoire 
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantite(sp.produit_id, sp.quantite + 1)}
+                            className="w-8 h-8 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                            style={{ backgroundColor: COLORS.orangeDoux }}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Total ligne */}
+                        <div 
+                          className="text-right w-24 font-semibold"
+                          style={{ color: sp.prix_unitaire_fige ? '#B45309' : COLORS.orangeDoux }}
+                        >
+                          {((sp.prix_unitaire_fige ?? sp.produit.prix_vente_total ?? 0) * sp.quantite).toFixed(2)} €
+                        </div>
+
+                        {/* Supprimer - ⚠️ OUVRE UNE POPUP, NE SUPPRIME PAS DIRECTEMENT */}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmationModal({
+                            type: "delete-product",
+                            productIndex: index,
+                            productName: sp.produit.name,
+                          })}
+                          className="p-2 hover:opacity-70 transition-opacity"
+                          style={{ color: COLORS.rougeDoux }}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p 
+                    className="text-sm text-center py-4"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Aucun produit sélectionné
+                  </p>
+                )}
+
+                {/* ⚠️ BOUTON AJOUTER - APRÈS la liste, pleine largeur, fond OLIVE */}
+                <button
+                  type="button"
+                  onClick={() => setShowProduitSelector(!showProduitSelector)}
+                  className="w-full py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 mb-4"
+                  style={{ backgroundColor: COLORS.olive }}
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Ajouter un produit
+                </button>
+
+                {/* Sous-total */}
+                {selectedProduits.length > 0 && (
+                  <div style={{ color: COLORS.noir }}>
+                    <p>
+                      <span className="font-medium">Sous-total produits :</span>{" "}
+                      <span style={{ color: COLORS.orangeDoux, fontWeight: 600 }}>
+                        {totalHT.toFixed(2)} €
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Sélecteur produits (popup) */}
+                {showProduitSelector && (
+                  <div 
+                    className="mt-4 p-4 rounded-lg border-2"
+                    style={{ borderColor: COLORS.olive }}
+                  >
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 
+                        className="font-medium"
+                        style={{ color: COLORS.olive }}
+                      >
+                        Bibliothèque produits
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setShowProduitSelector(false)}
+                        style={{ color: COLORS.olive }}
+                        className="hover:opacity-70"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    {/* Recherche */}
+                    <div className="relative mb-3">
+                      <span 
+                        className="absolute left-3 top-1/2 -translate-y-1/2"
+                        style={{ color: COLORS.olive }}
+                      >
+                        <SearchIcon className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="text"
+                        value={produitSearch}
+                        onChange={(e) => setProduitSearch(e.target.value)}
+                        placeholder="Rechercher un produit..."
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border-2 focus:outline-none"
+                        style={{ 
+                          borderColor: COLORS.ecru,
+                          backgroundColor: COLORS.ivoire
+                        }}
+                      />
+                    </div>
+
+                    {/* Liste produits disponibles */}
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {filteredProduits.map((prod) => {
+                        const isSelected = selectedProduits.some((sp) => sp.produit_id === prod.id);
+
+                        return (
+                          <button
+                            key={prod.id}
+                            type="button"
+                            onClick={() => handleAddProduit(prod)}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left"
+                            style={{ 
+                              backgroundColor: isSelected ? `${COLORS.orangeDoux}20` : 'transparent',
+                              border: isSelected ? `1px solid ${COLORS.orangeDoux}` : '1px solid transparent'
+                            }}
+                          >
+                            <div 
+                              className="w-10 h-10 rounded flex items-center justify-center overflow-hidden flex-shrink-0"
+                              style={{ backgroundColor: COLORS.ecru }}
+                            >
+                              {prod.photo_url ? (
+                                <img
+                                  src={prod.photo_url}
+                                  alt={prod.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span style={{ color: COLORS.olive }}>
+                                  <ToolIcon className="w-5 h-5" />
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p 
+                                className="font-medium truncate flex items-center gap-2"
+                                style={{ color: COLORS.noir }}
+                              >
+                                {prod.name}
+                                {isSelected && <Check className="w-4 h-4" style={{ color: COLORS.orangeDoux }} />}
+                              </p>
+                              {prod.reference && (
+                                <p className="text-xs" style={{ color: COLORS.olive }}>
+                                  Réf: {prod.reference}
+                                </p>
+                              )}
+                            </div>
+
+                            <p 
+                              className="text-sm font-semibold"
+                              style={{ color: COLORS.orangeDoux }}
+                            >
+                              {(prod.prix_vente_total || 0).toFixed(2)} €
+                            </p>
+                          </button>
+                        );
+                      })}
+
+                      {filteredProduits.length === 0 && (
+                        <p 
+                          className="text-sm text-center py-4"
+                          style={{ color: COLORS.olive }}
+                        >
+                          Aucun produit trouvé
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* ===== SECTION: Récapitulatif financier ===== */}
+              {selectedProduits.length > 0 && (
+                <section
+                  className="p-6 rounded-lg border-l-4"
+                  style={{
+                    backgroundColor: COLORS.ecru,
+                    borderLeftColor: COLORS.olive,
+                  }}
+                >
+                  <h3 
+                    className="text-lg font-semibold mb-6" 
+                    style={{ color: COLORS.olive }}
+                  >
+                    Récapitulatif financier
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {/* Prix de revient */}
+                    <div 
+                      className="p-4 rounded-lg" 
+                      style={{ backgroundColor: COLORS.ivoire }}
+                    >
+                      <p 
+                        className="text-xs uppercase tracking-wider" 
+                        style={{ color: COLORS.olive }}
+                      >
+                        Prix de revient
+                      </p>
+                      <p 
+                        className="text-2xl font-bold mt-1" 
+                        style={{ color: COLORS.noir }}
+                      >
+                        {totalRevient.toFixed(2)} €
+                      </p>
+                    </div>
+
+                    {/* Prix de vente */}
+                    <div 
+                      className="p-4 rounded-lg" 
+                      style={{ backgroundColor: COLORS.ivoire }}
+                    >
+                      <p 
+                        className="text-xs uppercase tracking-wider" 
+                        style={{ color: COLORS.olive }}
+                      >
+                        Prix de vente
+                      </p>
+                      <p 
+                        className="text-2xl font-bold mt-1" 
+                        style={{ color: COLORS.olive }}
+                      >
+                        {totalHT.toFixed(2)} €
+                      </p>
+                    </div>
+
+                    {/* Marge € */}
+                    <div 
+                      className="p-4 rounded-lg" 
+                      style={{ backgroundColor: COLORS.ivoire }}
+                    >
+                      <p 
+                        className="text-xs uppercase tracking-wider" 
+                        style={{ color: COLORS.olive }}
+                      >
+                        Marge
+                      </p>
+                      <p
+                        className="text-2xl font-bold mt-1"
+                        style={{ color: getMargeColor(margeEuros) }}
+                      >
+                        {margeEuros.toFixed(2)} €
+                      </p>
+                    </div>
+
+                    {/* Marge % */}
+                    <div 
+                      className="p-4 rounded-lg" 
+                      style={{ backgroundColor: COLORS.ivoire }}
+                    >
+                      <p 
+                        className="text-xs uppercase tracking-wider" 
+                        style={{ color: COLORS.olive }}
+                      >
+                        Marge %
+                      </p>
+                      <div className="mt-1">
+                        <span
+                          className="px-3 py-1 rounded-full text-sm font-bold text-white inline-block"
+                          style={{ backgroundColor: getMargeBadgeColor(margePourcent) }}
+                        >
+                          {margePourcent.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Formules explicatives */}
+                  <div 
+                    className="space-y-1 text-xs" 
+                    style={{ color: COLORS.olive }}
+                  >
+                    <p>Prix de revient = Composants (coût) + Main d'œuvre</p>
+                    <p>Marge = Prix vente - Prix revient</p>
+                  </div>
+                </section>
+              )}
+
+              {/* ===== SECTION: Catégorie ===== */}
+              <section>
+                <label 
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: COLORS.olive }}
+                >
+                  Catégorie
+                </label>
+                <select
+                  value={formData.categorie_id || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "__manage__") {
+                      setShowCategoryManager(true);
+                      return;
+                    }
+                    setFormData({ ...formData, categorie_id: value || null });
+                  }}
+                  className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                  style={{ 
+                    borderColor: COLORS.ecru,
+                    backgroundColor: COLORS.ivoire,
+                    color: COLORS.noir
+                  }}
+                >
+                  <option value="">Aucune catégorie</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                  <option disabled>────────────────</option>
+                  <option value="__manage__" style={{ color: COLORS.olive }}>
+                    ⚙ Gérer les catégories...
                   </option>
-                ))}
-                <option disabled>────────────────</option>
-                <option
-                  value="__manage__"
-                  style={{ color: "#76715A" }}
-                >
-                  ⚙ Gérer les catégories...
-                </option>
-              </select>
-            </div>
+                </select>
+                
+                {/* Preview pastille couleur */}
+                {formData.categorie_id && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{
+                        backgroundColor: categories.find((c) => c.id === formData.categorie_id)?.color || COLORS.orangeChaud,
+                      }}
+                    />
+                    <span className="text-sm" style={{ color: COLORS.olive }}>
+                      {categories.find((c) => c.id === formData.categorie_id)?.name}
+                    </span>
+                  </div>
+                )}
+              </section>
 
-            {/* Bouton Supprimer définitivement - Uniquement en mode édition */}
-            {mode === "edit" && (
-              <div className="pt-4 border-t border-red-200 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
-                >
-                  <DeleteIcon className="w-4 h-4" />
-                  Supprimer définitivement
+              {/* ===== Bouton Supprimer ===== */}
+              {mode === "edit" && (
+                <section>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmationModal({ type: "delete-project" })}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 border-2 hover:bg-red-50 disabled:opacity-50"
+                    style={{
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.rougeDoux,
+                      borderColor: COLORS.rougeDoux,
+                    }}
+                  >
+                  <Trash2 size={18} />
+                  Supprimer ce projet
                 </button>
-                <p className="text-xs text-red-600 mt-2">
-                  Cette action est irréversible. Le projet sera supprimé de manière permanente.
-                </p>
-              </div>
-            )}
+                </section>
+              )}
+            </form>
+          </div>
 
-            {/* Boutons */}
-            <div className="flex justify-between items-center pt-4 border-t">
-              <div>
-                {/* Le bouton de suppression n'est plus ici, il est au-dessus si archivé */}
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                >
-                  <BackIcon className="w-4 h-4 inline mr-2" />
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-white rounded-md hover:opacity-90 transition-colors disabled:opacity-50"
-                  style={{ backgroundColor: "#76715A" }}
-                >
-                  <SaveIcon className="w-4 h-4 inline mr-2" />
-                  {isSubmitting
-                    ? "Enregistrement..."
-                    : mode === "edit"
-                    ? "Enregistrer"
-                    : "Créer"}
-                </button>
-              </div>
-            </div>
-          </form>
+          {/* ===== FOOTER FIXE ===== */}
+          <div 
+            className="flex-shrink-0 flex justify-end gap-3 p-6"
+            style={{ borderTop: `1px solid ${COLORS.ecru}` }}
+          >
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-6 py-2 rounded-lg font-medium border-2 transition-colors"
+              style={{ 
+                borderColor: COLORS.olive,
+                color: COLORS.olive,
+                backgroundColor: COLORS.ivoire
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                await handleSubmit(fakeEvent);
+              }}
+              disabled={isSubmitting}
+              className="px-6 py-2 rounded-lg font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: COLORS.orangeDoux }}
+            >
+              {isSubmitting 
+                ? (mode === "edit" ? 'Modification...' : 'Création...') 
+                : (mode === "edit" ? 'Modifier le projet' : 'Créer le projet')
+              }
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Popup confirmation suppression */}
-      {showDeleteConfirm && (
+      {/* Popup confirmation SUPPRESSION PROJET */}
+      {confirmationModal?.type === "delete-project" && (
         <div
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setShowDeleteConfirm(false);
+              setConfirmationModal(null);
             }
           }}
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4"
         >
-          <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
-            <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              ⚠️ Attention : Suppression définitive
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.rougeDoux }}
+            >
+              Supprimer ce projet ?
             </h3>
-            <p className="text-gray-700 mb-2">
-              Êtes-vous sûr de vouloir supprimer définitivement ce projet ?
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.noir }}
+            >
+              Cette action est irréversible. Toutes les données associées seront perdues.
             </p>
-            <p className="text-sm text-gray-500 mb-6">
-              <span className="text-red-600 font-semibold">Cette action est irréversible.</span> Toutes les données associées seront perdues.
-            </p>
-            <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
               <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isSubmitting}
-                className="w-full px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <DeleteIcon className="w-5 h-5" />
-                {isSubmitting ? "Suppression..." : "Oui, supprimer définitivement"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isSubmitting}
-                className="w-full px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                onClick={() => setConfirmationModal(null)}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
               >
                 Annuler
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete();
+                  setConfirmationModal(null);
+                }}
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                {isSubmitting ? "Suppression..." : "Supprimer"}
               </button>
             </div>
           </div>
@@ -1265,7 +1735,58 @@ export function ProjetModal({
         />
       )}
 
-      {/* ✅ Modal de confirmation - 3 boutons */}
+      {/* ⚠️ Popup confirmation RETRAIT PRODUIT */}
+      {confirmationModal?.type === "delete-product" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.noir }}
+            >
+              Retirer ce produit ?
+            </h3>
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.olive }}
+            >
+              Voulez-vous retirer <strong>{confirmationModal.productName}</strong> de ce projet ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmationModal(null)}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmationModal.productIndex !== undefined) {
+                    handleRemoveProduitByIndex(confirmationModal.productIndex);
+                  }
+                  setConfirmationModal(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                Retirer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmation - 3 boutons */}
       {showConfirmClose && (
         <div
           onClick={(e) => {
@@ -1275,38 +1796,56 @@ export function ProjetModal({
           }}
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4"
         >
-          <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
-            <h3 className="text-xl font-bold text-[#76715A] mb-4">
+          <div 
+            className="rounded-xl max-w-md w-full p-6"
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <h3 
+              className="text-xl font-bold mb-4"
+              style={{ color: COLORS.noir }}
+            >
               {mode === "edit" ? "Modifications non enregistrées" : "Création en cours"}
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p 
+              className="mb-6"
+              style={{ color: COLORS.olive }}
+            >
               Vous avez des modifications non enregistrées. Que souhaitez-vous faire ?
             </p>
-
+            
             <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={handleSaveAndClose}
                 disabled={isSubmitting}
-                className="w-full px-6 py-3 bg-[#ED693A] text-white rounded-lg hover:bg-[#ED693A]/90 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ backgroundColor: COLORS.orangeDoux }}
               >
                 <SaveIcon className="w-5 h-5" />
                 {isSubmitting ? "Enregistrement..." : "Enregistrer et fermer"}
               </button>
-
+              
               <button
                 type="button"
                 onClick={handleCancelClose}
-                className="w-full px-6 py-3 border-2 border-[#76715A] text-[#76715A] rounded-lg hover:bg-[#EDEAE3] transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 border-2"
+                style={{ 
+                  borderColor: COLORS.olive,
+                  color: COLORS.olive 
+                }}
               >
                 <BackIcon className="w-5 h-5" />
                 Continuer l'édition
               </button>
-
+              
               <button
                 type="button"
                 onClick={handleConfirmClose}
-                className="w-full px-6 py-3 border-2 border-red-400 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 border-2"
+                style={{ 
+                  borderColor: COLORS.rougeDoux,
+                  color: COLORS.rougeDoux 
+                }}
               >
                 <DeleteIcon className="w-5 h-5" />
                 Abandonner les modifications

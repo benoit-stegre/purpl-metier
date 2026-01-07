@@ -1,13 +1,30 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { ProjetModal } from "./ProjetModal";
 import { ExportCommandeModal } from "./ExportCommandeModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
-import { SearchIcon } from "@/components/ui/Icons";
-import { FileDown, FileSpreadsheet } from "lucide-react";
+import { ProjetCard } from "./ProjetCard";
+import { SearchIcon, DuplicateIcon, DeleteIcon } from "@/components/ui/Icons";
 import { toast } from "react-hot-toast";
 import { exportProjetDevis } from "@/lib/exports/projetExports";
+import type { StatutProjet } from "@/types/database.types";
+
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  olive: "#76715A",
+  rougeDoux: "#C23C3C",
+};
+
+// Statuts par défaut (fallback si BDD vide)
+const DEFAULT_STATUTS: StatutProjet[] = [
+  { id: "default-brouillon", nom: "brouillon", couleur: "#6B7280", ordre: 0, is_system: true, created_at: "" },
+  { id: "default-en_cours", nom: "en_cours", couleur: "#3B82F6", ordre: 1, is_system: false, created_at: "" },
+  { id: "default-termine", nom: "termine", couleur: "#10B981", ordre: 2, is_system: false, created_at: "" },
+  { id: "default-annule", nom: "annule", couleur: "#EF4444", ordre: 3, is_system: false, created_at: "" },
+];
 
 interface Projet {
   id: string;
@@ -15,7 +32,7 @@ interface Projet {
   reference: string | null;
   description: string | null;
   client_id: string | null;
-  status: "draft" | "en_cours" | "termine" | "annule";
+  status: string; // Statut dynamique depuis statuts_projet
   date_debut: string | null;
   date_fin: string | null;
   budget: number | null;
@@ -25,6 +42,7 @@ interface Projet {
   created_at: string;
   updated_at: string;
   total_ht: number | null;
+  total_revient?: number | null; // Prix de revient total du projet
   categories_projets: {
     id: string;
     name: string;
@@ -39,23 +57,12 @@ interface Projet {
 
 interface ProjetsGridProps {
   projets: Projet[];
+  onDuplicate?: (projetId: string) => void;
+  onDelete?: (projetId: string) => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#6B7280",
-  en_cours: "#3B82F6",
-  termine: "#10B981",
-  annule: "#EF4444",
-};
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Brouillon",
-  en_cours: "En cours",
-  termine: "Terminé",
-  annule: "Annulé",
-};
-
-export function ProjetsGrid({ projets }: ProjetsGridProps) {
+export function ProjetsGrid({ projets, onDuplicate, onDelete }: ProjetsGridProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [selectedProjet, setSelectedProjet] = useState<Projet | null>(null);
@@ -66,6 +73,35 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showExportCommandeModal, setShowExportCommandeModal] = useState(false);
   const [exportProjetId, setExportProjetId] = useState<string | null>(null);
+  
+  // State pour les statuts dynamiques
+  const [statuts, setStatuts] = useState<StatutProjet[]>(DEFAULT_STATUTS);
+
+  // Charger les statuts depuis statuts_projet
+  useEffect(() => {
+    const loadStatuts = async () => {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("statuts_projet")
+          .select("*")
+          .order("ordre");
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setStatuts(data as StatutProjet[]);
+        } else {
+          setStatuts(DEFAULT_STATUTS);
+        }
+      } catch (error) {
+        console.error("Erreur chargement statuts:", error);
+        setStatuts(DEFAULT_STATUTS);
+      }
+    };
+
+    loadStatuts();
+  }, []);
 
   // Extraire les catégories uniques depuis les projets
   const uniqueCategories = useMemo(() => {
@@ -142,99 +178,42 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
     setShowModal(true);
   };
 
-  const handleExportDevis = async (projetId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const result = await exportProjetDevis(projetId);
-    if (result.success) {
-      toast.success("Devis exporté avec succès");
-    } else {
-      toast.error(result.error || "Erreur lors de l'export");
-    }
-  };
-
-  const handleExportCommande = (projetId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExportProjetId(projetId);
-    setShowExportCommandeModal(true);
-  };
-
-  // Fonction pour obtenir l'URL publique de la photo
-  const getPublicPhotoUrl = (photoUrl: string | null) => {
-    if (!photoUrl) return null;
-
-    // Si c'est déjà une URL complète, la retourner telle quelle
-    if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
-      return photoUrl;
-    }
-
-    // Sinon, construire l'URL publique depuis le chemin relatif
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) return null;
-
-    // Extraire le nom du fichier (enlever le chemin si présent)
-    const fileName = photoUrl.split("/").pop() || photoUrl;
-    return `${supabaseUrl}/storage/v1/object/public/projets-photos/${fileName}`;
-  };
 
   return (
     <>
-      {/* Filtres */}
-      <div className="flex gap-4 mb-4 flex-wrap">
-        {/* Input recherche */}
-        <div className="flex-1 min-w-0 sm:min-w-[200px] relative">
+      {/* Filtres - Style Produits */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        {/* Barre de recherche */}
+        <div className="w-full md:flex-1 relative">
           <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Rechercher un projet..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white"
           />
         </div>
 
-        {/* Select catégorie */}
-        <select
-          value={filterCategorie}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === "__manage__") {
-              setShowCategoryManager(true);
-              return;
-            }
-            setFilterCategorie(value);
-          }}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="all">Toutes les catégories</option>
-          {uniqueCategories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-          <option disabled>────────────────</option>
-          <option value="__manage__" style={{ color: "#76715A" }}>
-            ⚙ Gérer les catégories...
-          </option>
-        </select>
-
-        {/* Select status */}
+        {/* Select statut */}
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white cursor-pointer"
         >
           <option value="all">Tous les statuts</option>
-          <option value="draft">Brouillon</option>
-          <option value="en_cours">En cours</option>
-          <option value="termine">Terminé</option>
-          <option value="annule">Annulé</option>
+          {statuts.map((statut) => (
+            <option key={statut.id} value={statut.nom}>
+              {statut.nom.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+            </option>
+          ))}
         </select>
 
         {/* Select client */}
         <select
           value={filterClient}
           onChange={(e) => setFilterClient(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="w-full md:w-auto px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#76715A] bg-white cursor-pointer"
         >
           <option value="all">Tous les clients</option>
           {uniqueClients.map((client) => (
@@ -245,147 +224,43 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
         </select>
       </div>
 
-      {/* Grille */}
+      {/* Grille - Style Produits */}
       {filteredProjets.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          Aucun projet trouvé
+        <div className="text-center py-12 text-gray-400">
+          <p className="text-lg">Aucun projet trouvé</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProjets.map((projet) => {
-            const photoUrl = getPublicPhotoUrl(projet.photo_url);
-            const statusColor = STATUS_COLORS[projet.status] || "#6B7280";
-            const statusLabel = STATUS_LABELS[projet.status] || "Inconnu";
+            // Trouver le statut correspondant dans la liste des statuts chargés
+            const statutInfo = statuts.find((s) => s.nom === projet.status);
+            const statutColor = statutInfo?.couleur;
+            const statutLabel = statutInfo
+              ? statutInfo.nom.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+              : undefined;
 
             return (
-              <div
+              <ProjetCard
                 key={projet.id}
+                projet={{
+                  id: projet.id,
+                  nom: projet.name,
+                  reference: projet.reference,
+                  statut: projet.status, // Utiliser directement le statut (sans mapping)
+                  client_nom: projet.clients_pro?.raison_sociale || null,
+                  total_ht: projet.total_ht,
+                  total_revient: projet.total_revient ?? null,
+                  photo_url: projet.photo_url,
+                  date_debut: projet.date_debut,
+                  created_at: projet.created_at,
+                }}
+                variant="grid"
                 onClick={() => handleEdit(projet)}
-                className="bg-white border rounded-lg p-4 cursor-pointer hover:shadow-lg transition-shadow"
-              >
-                {/* Photo */}
-                {photoUrl && (
-                  <img
-                    src={photoUrl}
-                    alt={projet.name}
-                    className="w-full h-48 object-cover rounded-md mb-4"
-                    onError={(e) => {
-                      // En cas d'erreur, masquer l'image
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
-                )}
-
-                {/* Nom */}
-                <h3 className="font-semibold text-lg mb-2">{projet.name}</h3>
-
-                {/* Badges catégorie et status */}
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  {/* Badge catégorie (si existe) */}
-                  {projet.categories_projets && (
-                    <span
-                      className="inline-flex items-center px-2 py-1 text-xs font-medium rounded"
-                      style={{
-                        backgroundColor: `${
-                          projet.categories_projets.color || "#76715A"
-                        }15`,
-                        color: projet.categories_projets.color || "#76715A",
-                        border: `1px solid ${
-                          projet.categories_projets.color || "#76715A"
-                        }30`,
-                      }}
-                    >
-                      {projet.categories_projets.name}
-                    </span>
-                  )}
-
-                  {/* Badge status */}
-                  <span
-                    className="inline-flex items-center px-2 py-1 text-xs font-medium rounded"
-                    style={{
-                      backgroundColor: `${statusColor}15`,
-                      color: statusColor,
-                      border: `1px solid ${statusColor}30`,
-                    }}
-                  >
-                    {statusLabel}
-                  </span>
-                </div>
-
-                {/* Référence */}
-                {projet.reference && (
-                  <p className="text-sm text-gray-500 mt-2">
-                    Réf: {projet.reference}
-                  </p>
-                )}
-
-                {/* Client */}
-                {projet.clients_pro && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    Client: {projet.clients_pro.raison_sociale}
-                  </p>
-                )}
-
-                {/* Dates */}
-                {(projet.date_debut || projet.date_fin) && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {projet.date_debut &&
-                      `Du ${new Date(projet.date_debut).toLocaleDateString(
-                        "fr-FR"
-                      )}`}
-                    {projet.date_debut && projet.date_fin && " "}
-                    {projet.date_fin &&
-                      `au ${new Date(projet.date_fin).toLocaleDateString(
-                        "fr-FR"
-                      )}`}
-                  </p>
-                )}
-
-                {/* Total HT */}
-                <p className="text-sm font-semibold mt-2" style={{ color: "#76715A" }}>
-                  Total HT : {(projet.total_ht ?? 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}
-                </p>
-
-                {/* Budget */}
-                {projet.budget && (
-                  <p className="text-sm font-medium text-gray-700 mt-2">
-                    Budget:{" "}
-                    {projet.budget.toLocaleString("fr-FR", {
-                      style: "currency",
-                      currency: "EUR",
-                    })}
-                  </p>
-                )}
-
-                {/* Badge actif/inactif */}
-                <span
-                  className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded mt-2 ${
-                    projet.is_active
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {projet.is_active ? "Actif" : "Inactif"}
-                </span>
-
-                {/* Boutons d'export */}
-                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
-                  <button
-                    onClick={(e) => handleExportDevis(projet.id, e)}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#76715A] text-white rounded hover:bg-[#5f5a48] transition-colors text-sm"
-                  >
-                    <FileDown className="w-4 h-4" />
-                    Devis
-                  </button>
-                  <button
-                    onClick={(e) => handleExportCommande(projet.id, e)}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#ED693A] text-white rounded hover:bg-[#d85a2a] transition-colors text-sm"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    Commande
-                  </button>
-                </div>
-              </div>
+                onDuplicate={onDuplicate ? () => onDuplicate(projet.id) : undefined}
+                onDelete={onDelete ? () => onDelete(projet.id) : undefined}
+                statutColor={statutColor} // Passer la couleur du statut depuis statuts_projet
+                statutLabel={statutLabel} // Passer le label formaté du statut
+              />
             );
           })}
         </div>
@@ -404,7 +279,7 @@ export function ProjetsGrid({ projets }: ProjetsGridProps) {
                   reference: selectedProjet.reference,
                   description: selectedProjet.description,
                   client_id: selectedProjet.client_id,
-                  statut: (selectedProjet.status === "draft" ? "brouillon" : selectedProjet.status) as "brouillon" | "en_cours" | "termine" | "annule",
+                  statut: selectedProjet.status || "brouillon",
                   date_debut: selectedProjet.date_debut,
                   date_fin: selectedProjet.date_fin,
                   budget: selectedProjet.budget,
