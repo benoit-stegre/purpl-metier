@@ -8,8 +8,17 @@ import { ProduitCard } from "./ProduitCard";
 import { ProduitModal } from "./ProduitModal";
 import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { SearchIcon } from "@/components/ui/Icons";
+import { AlertTriangle } from "lucide-react";
 import { usePageHeader } from "@/contexts/PageHeaderContext";
-import type { Produit, ComposantForProduit, CategoryProduit } from "@/types";
+import type { Produit, ProduitKanban, ComposantForProduit, CategoryProduit } from "@/types";
+
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  noir: "#2F2F2E",
+  olive: "#76715A",
+  rougeDoux: "#C23C3C",
+}
 
 // Alias pour compatibilité
 type Composant = ComposantForProduit;
@@ -40,6 +49,14 @@ export function ProduitsView({
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [localProduits, setLocalProduits] = useState<Produit[]>(initialProduits);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean
+    produit: Produit | null
+  }>({
+    open: false,
+    produit: null,
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Extraire les catégories des produits
   useEffect(() => {
@@ -116,9 +133,64 @@ export function ProduitsView({
     setIsModalOpen(false);
   };
 
-  const handleEdit = (produit: Produit) => {
-    setEditingProduit(produit);
+  const handleEdit = (produit: Produit | ProduitKanban) => {
+    // ProduitsView utilise toujours Produit complet, donc on peut caster
+    setEditingProduit(produit as Produit);
     setIsModalOpen(true);
+  };
+
+  const handleDuplicate = (produit: Produit | ProduitKanban) => {
+    // Pour la duplication, on ouvre le modal en mode création avec les données du produit
+    const fullProduit = localProduits.find((p) => p.id === produit.id);
+    if (fullProduit) {
+      setEditingProduit({ ...fullProduit, id: '', name: `${fullProduit.name} (copie)` } as Produit);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDelete = async (produit: Produit | ProduitKanban) => {
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('produits')
+        .delete()
+        .eq('id', produit.id);
+
+      if (error) throw error;
+
+      await fetchProduits();
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+    }
+  };
+
+  const handleDeleteClick = (produit: Produit | ProduitKanban) => {
+    const fullProduit = localProduits.find((p) => p.id === produit.id);
+    if (fullProduit) {
+      setDeleteConfirm({ open: true, produit: fullProduit });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm.produit) return;
+    
+    setIsDeleting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('produits')
+        .delete()
+        .eq('id', deleteConfirm.produit.id);
+
+      if (error) throw error;
+
+      await fetchProduits();
+      setDeleteConfirm({ open: false, produit: null });
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleClose = () => {
@@ -194,6 +266,8 @@ export function ProduitsView({
             const fullProduit = localProduits.find((prod) => prod.id === p.id);
             if (fullProduit) handleEdit(fullProduit);
           }}
+          onProduitDuplicate={handleDuplicate}
+          onProduitDelete={handleDelete}
           onNewProduit={handleNewProduit}
         />
       ) : (
@@ -247,9 +321,8 @@ export function ProduitsView({
                 key={produit.id}
                 produit={produit}
                 onEdit={handleEdit}
-                onDelete={async () => {
-                  await fetchProduits();
-                }}
+                onDuplicate={() => handleDuplicate(produit)}
+                onDelete={handleDeleteClick}
               />
             ))}
           </div>
@@ -278,6 +351,53 @@ export function ProduitsView({
           onClose={() => setShowCategoryManager(false)}
           onUpdate={fetchCategories}
         />
+      )}
+
+      {/* Popup Confirmation Suppression */}
+      {deleteConfirm.open && deleteConfirm.produit && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.rougeDoux }}
+            >
+              Supprimer ce produit ?
+            </h3>
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.noir }}
+            >
+              Cette action est irréversible. Toutes les données associées seront perdues.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm({ open: false, produit: null })}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                {isDeleting ? "Suppression..." : "Supprimer définitivement"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

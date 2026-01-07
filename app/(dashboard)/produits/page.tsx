@@ -21,6 +21,7 @@ export default async function ProduitsPage() {
           id,
           name,
           reference,
+          prix_achat,
           prix_vente,
           photo_url,
           poids
@@ -46,6 +47,7 @@ export default async function ProduitsPage() {
       id, 
       name, 
       reference, 
+      prix_achat,
       prix_vente, 
       photo_url, 
       is_active, 
@@ -62,6 +64,7 @@ export default async function ProduitsPage() {
   // Transformer les composants pour gérer les valeurs null
   const transformedComposants = (composants || []).map(comp => ({
     ...comp,
+    prix_achat: comp.prix_achat ?? 0,
     prix_vente: comp.prix_vente ?? 0,
     categorie: Array.isArray(comp.categorie) 
       ? (comp.categorie.length > 0 ? comp.categorie[0] : null)

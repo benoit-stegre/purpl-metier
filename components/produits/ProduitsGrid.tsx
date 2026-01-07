@@ -4,11 +4,21 @@ import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
+import { AlertTriangle } from 'lucide-react'
 import { SearchIcon } from '@/components/ui/Icons'
 import { ProduitModal } from './ProduitModal'
 import { ProduitCard } from './ProduitCard'
 import CategoryManagerModal from '@/components/categories/CategoryManagerModal'
-import type { Produit, ComposantForProduit } from '@/types'
+import type { Produit, ProduitKanban, ComposantForProduit } from '@/types'
+
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  ecru: "#EDEAE3", 
+  noir: "#2F2F2E",
+  olive: "#76715A",
+  rougeDoux: "#C23C3C",
+}
 
 // Alias pour compatibilité
 type Composant = ComposantForProduit
@@ -27,6 +37,7 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [categories, setCategories] = useState<any[]>([])
   const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean
     produitId: string | null
@@ -79,8 +90,9 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
     router.refresh()
   }
   
-  const handleEdit = (produit: Produit) => {
-    setEditingProduit(produit)
+  const handleEdit = (produit: Produit | ProduitKanban) => {
+    // ProduitsGrid utilise toujours Produit complet, donc on peut caster
+    setEditingProduit(produit as Produit)
     setIsModalOpen(true)
   }
   
@@ -92,6 +104,7 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
   const handleDelete = async () => {
     if (!deleteConfirm.produitId) return
 
+    setIsDeleting(true)
     try {
       const supabase = createClient()
       const { error } = await supabase
@@ -107,10 +120,13 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
     } catch (error) {
       console.error('Erreur suppression:', error)
       toast.error('Erreur lors de la suppression')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
-  const handleDeleteClick = (produit: Produit) => {
+  const handleDeleteClick = (produit: Produit | ProduitKanban) => {
+    console.log('ProduitsGrid: handleDeleteClick appelé', { produitId: produit.id, produitName: produit.name })
     setDeleteConfirm({
       open: true,
       produitId: produit.id,
@@ -184,14 +200,23 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
       
       {/* Grille */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {filteredProduits.map(produit => (
-          <ProduitCard 
-            key={produit.id} 
-            produit={produit}
-            onEdit={handleEdit}
-            onDelete={handleDeleteClick}
-          />
-        ))}
+        {filteredProduits.map(produit => {
+          console.log('ProduitsGrid: rendu ProduitCard', { 
+            produitName: produit.name, 
+            hasHandleDeleteClick: !!handleDeleteClick 
+          })
+          return (
+            <ProduitCard 
+              key={produit.id} 
+              produit={produit}
+              onEdit={handleEdit}
+              onDelete={(p) => {
+                console.log('🔴🔴🔴 ProduitsGrid: onDelete inline appelé', p.name)
+                handleDeleteClick(p)
+              }}
+            />
+          )
+        })}
       </div>
       
       {filteredProduits.length === 0 && (
@@ -219,39 +244,45 @@ export function ProduitsGrid({ initialProduits, availableComposants }: ProduitsG
 
       {/* Popup Confirmation Suppression */}
       {deleteConfirm.open && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={() =>
-            setDeleteConfirm({ open: false, produitId: null, produitName: '' })
-          }
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md mx-4"
-            onClick={(e) => e.stopPropagation()}
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
           >
-            <h3 className="text-lg font-semibold text-purpl-black mb-4">
-              ⚠️ Attention : Suppression définitive
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.rougeDoux }}
+            >
+              Supprimer ce produit ?
             </h3>
-            <p className="text-purpl-green mb-6">
-              Êtes-vous sûr de vouloir supprimer définitivement le produit{' '}
-              <strong className="text-purpl-black">{deleteConfirm.produitName}</strong> ?
-              <br />
-              <span className="text-red-600 font-semibold">Cette action est irréversible.</span>
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.noir }}
+            >
+              Cette action est irréversible. Toutes les données associées seront perdues.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3">
               <button
-                onClick={() =>
-                  setDeleteConfirm({ open: false, produitId: null, produitName: '' })
-                }
-                className="px-4 py-2 border-2 border-purpl-ecru rounded-lg hover:bg-purpl-ecru transition-colors text-purpl-black"
+                onClick={() => setDeleteConfirm({ open: false, produitId: null, produitName: '' })}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
               >
                 Annuler
               </button>
               <button
                 onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50"
+                style={{ backgroundColor: COLORS.rougeDoux }}
               >
-                Supprimer
+                {isDeleting ? "Suppression..." : "Supprimer définitivement"}
               </button>
             </div>
           </div>

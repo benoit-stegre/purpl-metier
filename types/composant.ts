@@ -21,6 +21,7 @@ export type ComposantForProduit = {
   id: string
   name: string
   reference: string | null
+  prix_achat: number
   prix_vente: number
   photo_url: string | null
   is_active: boolean

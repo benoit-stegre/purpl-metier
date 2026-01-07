@@ -20,6 +20,7 @@ export type Produit = ProduitBase & {
       id: string
       name: string
       reference: string | null
+      prix_achat: number
       prix_vente: number
       photo_url: string | null
       poids: number | null
@@ -72,5 +73,6 @@ export type ProduitMinimal = {
   prix_vente_total: number | null
   photo_url: string | null
   is_active: boolean
+  prix_revient?: number // Prix de revient calculé (composants + main d'œuvre)
 }
 

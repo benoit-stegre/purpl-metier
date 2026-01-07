@@ -1,9 +1,24 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Package, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
-import { WeightIcon } from "@/components/ui/Icons";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "react-hot-toast";
+import { Package, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { ProduitCard } from "./ProduitCard";
 import type { ProduitKanban, CategoryProduit } from "@/types";
+
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  ecru: "#EDEAE3", 
+  noir: "#2F2F2E",
+  olive: "#76715A",
+  orangeDoux: "#E77E55",
+  orangeChaud: "#ED693A",
+  rougeDoux: "#C23C3C",
+  vertDoux: "#409143",
+}
 
 // Alias pour compatibilité
 type Produit = ProduitKanban;
@@ -13,6 +28,8 @@ interface ProduitsKanbanProps {
   produits: Produit[];
   categories: Category[];
   onProduitClick?: (produit: Produit) => void;
+  onProduitDuplicate?: (produit: Produit) => void;
+  onProduitDelete?: (produit: Produit) => void;
   onNewProduit?: () => void;
 }
 
@@ -21,10 +38,14 @@ function KanbanColumn({
   column,
   produits,
   onProduitClick,
+  onProduitDuplicate,
+  onProduitDelete,
 }: {
   column: { id: string; name: string; color: string };
   produits: Produit[];
   onProduitClick?: (produit: Produit) => void;
+  onProduitDuplicate?: (produit: Produit) => void;
+  onProduitDelete?: (produit: Produit) => void;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showTopArrow, setShowTopArrow] = useState(false);
@@ -115,10 +136,13 @@ function KanbanColumn({
           </div>
         ) : (
           produits.map((produit) => (
-            <KanbanProduitCard
+            <ProduitCard
               key={produit.id}
               produit={produit}
+              variant="kanban"
               onClick={() => onProduitClick?.(produit)}
+              onDuplicate={() => onProduitDuplicate?.(produit)}
+              onDelete={() => onProduitDelete?.(produit)}
             />
           ))
         )}
@@ -127,95 +151,27 @@ function KanbanColumn({
   );
 }
 
-// Carte produit pour le Kanban
-function KanbanProduitCard({
-  produit,
-  onClick,
-}: {
-  produit: Produit;
-  onClick?: () => void;
-}) {
-  // Utiliser directement prix_vente_total de la BDD (calculé et sauvegardé correctement)
-  const prixVenteTotal = produit.prix_vente_total ?? 0
-
-  const formattedPrix = prixVenteTotal.toLocaleString("fr-FR", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-  })
-
-  // Calcul du poids total = Σ (composant.poids × quantité)
-  // Ignorer les composants sans poids (null, undefined, 0)
-  const poidsTotal = produit.produits_composants?.reduce((total, pc) => {
-    if (!pc.composant || !pc.composant.poids) return total;
-    return total + (pc.composant.poids * pc.quantite);
-  }, 0) || 0;
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onClick?.();
-  };
-
-  return (
-    <div
-      onClick={handleClick}
-      className="bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:shadow-md hover:border-[#76715A]/30 transition-all duration-200"
-    >
-      {/* Image ou placeholder */}
-      <div className="w-full h-20 bg-gray-100 rounded-md mb-2 overflow-hidden flex items-center justify-center">
-        {produit.photo_url ? (
-          <img
-            src={produit.photo_url}
-            alt={produit.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <Package className="w-8 h-8 text-gray-300" />
-        )}
-      </div>
-
-      {/* Nom */}
-      <h3 className="font-semibold text-[#2F2F2E] text-sm truncate">
-        {produit.name}
-      </h3>
-
-      {/* Référence */}
-      {produit.reference && (
-        <p className="text-xs text-gray-500 truncate">
-          Réf: {produit.reference}
-        </p>
-      )}
-
-      {/* Poids total */}
-      {poidsTotal > 0 && (
-        <div className="text-xs text-[#76715A] mt-2 flex items-center gap-1">
-          <WeightIcon className="w-4 h-4" />
-          <span>{poidsTotal.toFixed(2)}</span>
-        </div>
-      )}
-
-      {/* Prix */}
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-        <div className="flex items-center gap-1 text-sm font-medium text-[#76715A]">
-          <span>{formattedPrix}</span>
-        </div>
-      </div>
-
-    </div>
-  );
-}
-
 export function ProduitsKanban({
   produits,
   categories,
   onProduitClick,
+  onProduitDuplicate,
+  onProduitDelete,
   onNewProduit,
 }: ProduitsKanbanProps) {
+  const router = useRouter();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
   const [shouldCenter, setShouldCenter] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    produit: Produit | null;
+  }>({
+    open: false,
+    produit: null,
+  });
 
   // Grouper par catégorie
   const produitsByCategory = useMemo(() => {
@@ -303,6 +259,37 @@ export function ProduitsKanban({
     }
   };
 
+  const handleDeleteClick = (produit: Produit) => {
+    setDeleteConfirm({
+      open: true,
+      produit: produit,
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm.produit) return;
+
+    setIsDeleting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("produits")
+        .delete()
+        .eq("id", deleteConfirm.produit.id);
+
+      if (error) throw error;
+
+      toast.success("Produit supprimé");
+      router.refresh();
+    } catch (error) {
+      console.error("Erreur suppression:", error);
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm({ open: false, produit: null });
+    }
+  };
+
   return (
     <div className="relative">
       {/* Flèche gauche */}
@@ -340,6 +327,8 @@ export function ProduitsKanban({
             column={column}
             produits={produitsByCategory[column.id] || []}
             onProduitClick={onProduitClick}
+            onProduitDuplicate={onProduitDuplicate}
+            onProduitDelete={handleDeleteClick}
           />
         ))}
 
@@ -351,6 +340,53 @@ export function ProduitsKanban({
           </div>
         )}
       </div>
+
+      {/* Popup confirmation suppression produit */}
+      {deleteConfirm.open && deleteConfirm.produit && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.rougeDoux }}
+            >
+              Supprimer ce produit ?
+            </h3>
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.noir }}
+            >
+              Cette action est irréversible. Toutes les données associées seront perdues.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm({ open: false, produit: null })}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                {isDeleting ? "Suppression..." : "Supprimer définitivement"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

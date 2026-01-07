@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CloseIcon, SaveIcon, BackIcon, DeleteIcon, SearchIcon, PlusIcon, ToolIcon, ImageIcon, SettingsIcon, WeightIcon } from '@/components/ui/Icons'
-import { AlertTriangle, Check } from 'lucide-react'
+import { CloseIcon, SaveIcon, BackIcon, DeleteIcon, SearchIcon, PlusIcon, ToolIcon, ImageIcon } from '@/components/ui/Icons'
+import { AlertTriangle, Check, Trash2, X } from 'lucide-react'
 import CategoryManagerModal from '@/components/categories/CategoryManagerModal'
 import { recalculerProjetsBrouillonPourProduit } from '@/lib/utils/recalculCascade'
 import type { Produit, ComposantForProduit } from '@/types'
@@ -11,10 +11,22 @@ import type { Produit, ComposantForProduit } from '@/types'
 // Alias pour compatibilité
 type Composant = ComposantForProduit
 
+// Couleurs PURPL
+const COLORS = {
+  ivoire: "#FFFEF5",
+  ecru: "#EDEAE3", 
+  noir: "#2F2F2E",
+  olive: "#76715A",
+  orangeDoux: "#E77E55",
+  orangeChaud: "#ED693A",
+  rougeDoux: "#C23C3C",
+  vertDoux: "#409143",
+}
+
 type SelectedComposant = {
   composant_id: string
   quantite: number
-  composant: Composant  // Pour afficher les infos
+  composant: Composant
 }
 
 interface ProduitModalProps {
@@ -35,14 +47,20 @@ export function ProduitModal({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showConfirmClose, setShowConfirmClose] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [confirmationModal, setConfirmationModal] = useState<{
+    type: "delete-product" | "delete-component"
+    componentIndex?: number
+    componentName?: string
+  } | null>(null)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const initialFormData = {
     name: '',
     reference: '',
     description: '',
     categorie_id: null as string | null,
-    prix_heure: 0,
+    prix_heure: 50,
     nombre_heures: 0,
   }
   
@@ -54,17 +72,23 @@ export function ProduitModal({
   const [originalPhotoUrl, setOriginalPhotoUrl] = useState<string | null>(null)
   const [originalData, setOriginalData] = useState(initialFormData)
   
-  // State pour composants sélectionnés
   const [selectedComposants, setSelectedComposants] = useState<SelectedComposant[]>([])
   const [originalSelectedComposants, setOriginalSelectedComposants] = useState<SelectedComposant[]>([])
   
-  // State pour le sélecteur
   const [showComposantSelector, setShowComposantSelector] = useState(false)
   const [composantSearch, setComposantSearch] = useState('')
   const [composantCategoryFilter, setComposantCategoryFilter] = useState<string>('all')
   const [composantCategories, setComposantCategories] = useState<any[]>([])
   
   const isEditMode = editingProduit !== null
+  
+  // Titre dynamique
+  const modalTitle = useMemo(() => {
+    if (formData.name.trim()) {
+      return formData.name
+    }
+    return isEditMode ? 'Modifier le produit' : 'Nouveau produit'
+  }, [formData.name, isEditMode])
   
   // Fetch catégories au mount
   useEffect(() => {
@@ -74,7 +98,6 @@ export function ProduitModal({
     }
   }, [isOpen])
   
-  // Fetch catégories de composants
   const fetchComposantCategories = async () => {
     try {
       const supabase = createClient()
@@ -84,11 +107,9 @@ export function ProduitModal({
         .order('name')
       
       if (error) throw error
-      // Filtrer la catégorie "Sans catégorie" si elle existe (ne devrait pas être dans la BDD)
       if (data) {
         const filtered = data.filter(cat => {
           const name = cat.name?.toLowerCase().trim() || ''
-          // Exclure toutes les variations de "Sans catégorie"
           const isSansCategorie = name.includes('sans') && name.includes('catégorie') ||
                                   name.includes('sans') && name.includes('categorie') ||
                                   name === 'sans catégorie' ||
@@ -121,18 +142,9 @@ export function ProduitModal({
   // Charger données en mode édition
   useEffect(() => {
     if (isOpen && editingProduit) {
-      // Extraire categorie_id du produit (peut être dans l'objet directement ou via categories_produits)
       const categorieId = editingProduit.categorie_id || 
                          (editingProduit.categories_produits?.id) || 
                          null
-      
-      console.log('📥 Chargement produit en édition:', {
-        produitId: editingProduit.id,
-        produitName: editingProduit.name,
-        categorie_id_direct: editingProduit.categorie_id,
-        categories_produits: editingProduit.categories_produits,
-        categorieId_extrait: categorieId
-      })
       
       const loadedData = {
         name: editingProduit.name,
@@ -143,12 +155,14 @@ export function ProduitModal({
         nombre_heures: (editingProduit as any).nombre_heures || 0,
       }
       
-      console.log('📝 loadedData avec categorie_id:', loadedData.categorie_id)
-      
       setFormData(loadedData)
       setOriginalData(loadedData)
       
-      // Charger composants sélectionnés
+      if (editingProduit.photo_url) {
+        setPhotoPreview(editingProduit.photo_url)
+        setOriginalPhotoUrl(editingProduit.photo_url)
+      }
+      
       const loadedComposants: SelectedComposant[] = editingProduit.produits_composants
         .map(pc => {
           const composant = availableComposants.find(c => c.id === pc.composant?.id)
@@ -163,7 +177,7 @@ export function ProduitModal({
         .filter((sc): sc is SelectedComposant => sc !== null)
       
       setSelectedComposants(loadedComposants)
-      setOriginalSelectedComposants(JSON.parse(JSON.stringify(loadedComposants))) // Deep copy
+      setOriginalSelectedComposants(JSON.parse(JSON.stringify(loadedComposants)))
       
     } else if (isOpen) {
       setFormData(initialFormData)
@@ -197,10 +211,7 @@ export function ProduitModal({
   
   // Détection changements
   const hasChanges = () => {
-    // Nouvelle photo uploadée
     if (photoFile !== null) return true
-    
-    // Photo supprimée (était présente, plus maintenant)
     if (originalPhotoUrl && !photoPreview) return true
     
     const formChanged = 
@@ -211,7 +222,6 @@ export function ProduitModal({
       formData.prix_heure !== originalData.prix_heure ||
       formData.nombre_heures !== originalData.nombre_heures
     
-    // Vérifier changements composants
     const composantsChanged = 
       selectedComposants.length !== originalSelectedComposants.length ||
       selectedComposants.some((sc, index) => {
@@ -247,13 +257,10 @@ export function ProduitModal({
     }
   }
   
-  
-  // Handlers pour gérer les composants
+  // Handlers composants
   const handleAddComposant = (composant: Composant) => {
-    // Vérifier si déjà ajouté
     const exists = selectedComposants.find(sc => sc.composant_id === composant.id)
     if (exists) {
-      // Incrémenter la quantité
       setSelectedComposants(prev => 
         prev.map(sc => 
           sc.composant_id === composant.id 
@@ -262,7 +269,6 @@ export function ProduitModal({
         )
       )
     } else {
-      // Ajouter nouveau
       setSelectedComposants(prev => [...prev, {
         composant_id: composant.id,
         quantite: 1,
@@ -292,8 +298,19 @@ export function ProduitModal({
       prev.filter(sc => sc.composant_id !== composantId)
     )
   }
+
+  const handleRemoveComposantByIndex = (index: number) => {
+    if (index >= 0 && index < selectedComposants.length) {
+      const composantId = selectedComposants[index].composant_id
+      handleRemoveComposant(composantId)
+    }
+  }
+
+  const handleDelete = async () => {
+    await handlePermanentDelete()
+  }
   
-  // Handler pour upload photo
+  // Photo handler
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -302,40 +319,73 @@ export function ProduitModal({
     }
   }
   
-  // ✅ CALCULS - UNE SEULE FOIS ICI (accessible par toutes les fonctions)
-  // Prix total composants
-  const prixTotalComposants = selectedComposants.reduce((total, sc) => {
-    return total + (sc.composant.prix_vente * sc.quantite)
-  }, 0)
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click()
+  }
   
-  // Poids total = Σ (composant.poids × quantité)
-  // Ignorer les composants sans poids (null, undefined, 0)
-  const poidsTotal = selectedComposants.reduce((total, sc) => {
-    if (!sc.composant || !sc.composant.poids) return total
-    return total + (sc.composant.poids * sc.quantite)
-  }, 0)
+  // Calculs financiers
+  const calculatedData = useMemo(() => {
+    const composantsCostSubtotal = selectedComposants.reduce(
+      (sum, sc) => sum + (sc.composant.prix_achat || 0) * sc.quantite, 
+      0
+    )
+    
+    const composantsSaleSubtotal = selectedComposants.reduce(
+      (sum, sc) => sum + (sc.composant.prix_vente || 0) * sc.quantite,
+      0
+    )
+    
+    const laborCost = (formData.prix_heure || 0) * (formData.nombre_heures || 0)
+    
+    const totalWeight = selectedComposants.reduce(
+      (sum, sc) => sum + ((sc.composant.poids || 0) * sc.quantite),
+      0
+    )
+    
+    const prixRevient = composantsCostSubtotal + laborCost
+    const prixVente = composantsSaleSubtotal + laborCost
+    const margeEuros = prixVente - prixRevient
+    const margePourcent = prixRevient > 0 ? (margeEuros / prixRevient) * 100 : 0
+
+    return {
+      composantsCostSubtotal,
+      composantsSaleSubtotal,
+      laborCost,
+      totalWeight,
+      prixRevient,
+      prixVente,
+      margeEuros,
+      margePourcent,
+    }
+  }, [selectedComposants, formData.prix_heure, formData.nombre_heures])
+
+  const prixTotalComposants = calculatedData.composantsSaleSubtotal
+  const prixVenteCalcule = calculatedData.prixVente
+
+  const getMargeColor = (value: number) => {
+    return value >= 0 ? COLORS.vertDoux : COLORS.rougeDoux
+  }
+
+  const getMargeBadgeColor = (percent: number) => {
+    if (percent > 30) return COLORS.vertDoux
+    if (percent > 15) return COLORS.orangeDoux
+    if (percent > 0) return COLORS.orangeChaud
+    return COLORS.rougeDoux
+  }
   
-  // Coût temps = Prix de l'heure × Nombre d'heures
-  const coutTemps = (formData.prix_heure || 0) * (formData.nombre_heures || 0)
-  
-  // Prix vente final
-  const prixVenteCalcule = prixTotalComposants + coutTemps
-  
-  // Filtrage composants pour le sélecteur
+  // Filtrage composants
   const filteredComposants = availableComposants.filter(comp => {
-    // Filtre recherche
     const matchesSearch = composantSearch === '' ||
       comp.name.toLowerCase().includes(composantSearch.toLowerCase()) ||
       (comp.reference && comp.reference.toLowerCase().includes(composantSearch.toLowerCase()))
     
-    // Filtre catégorie
     const matchesCategory = composantCategoryFilter === 'all' ||
       comp.categorie_id === composantCategoryFilter
     
     return matchesSearch && matchesCategory
   })
   
-  // ✅ Fonction commune pour la sauvegarde
+  // Sauvegarde
   const performSave = async () => {
     setIsLoading(true)
     setError(null)
@@ -345,7 +395,6 @@ export function ProduitModal({
       
       let photo_url: string | null = editingProduit?.photo_url || null
       
-      // Upload nouvelle photo si fichier sélectionné
       if (photoFile) {
         const fileExt = photoFile.name.split('.').pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
@@ -362,7 +411,6 @@ export function ProduitModal({
         
         photo_url = publicUrl
         
-        // Supprimer ancienne photo si existe
         if (editingProduit?.photo_url) {
           const oldFileName = editingProduit.photo_url.split('/').pop()
           if (oldFileName) {
@@ -383,10 +431,6 @@ export function ProduitModal({
         prix_heure: formData.prix_heure || 0,
         nombre_heures: formData.nombre_heures || 0,
       }
-
-      // Debug: vérifier categorie_id
-      console.log('📝 dataToSave:', dataToSave)
-      console.log('🔍 categorie_id:', formData.categorie_id)
       
       let produitId: string
       
@@ -400,7 +444,6 @@ export function ProduitModal({
         
         produitId = editingProduit.id
         
-        // Supprimer anciens composants
         const { error: deleteError } = await supabase
           .from('produits_composants')
           .delete()
@@ -421,7 +464,6 @@ export function ProduitModal({
         produitId = insertData.id
       }
       
-      // Insérer nouveaux composants
       if (selectedComposants.length > 0) {
         const composantsToInsert = selectedComposants.map(sc => ({
           produit_id: produitId,
@@ -436,7 +478,6 @@ export function ProduitModal({
         if (insertComposantsError) throw insertComposantsError
       }
 
-      // Recalculer les projets brouillon qui utilisent ce produit
       recalculerProjetsBrouillonPourProduit(produitId).catch((err) =>
         console.error("Erreur recalcul projets brouillon:", err)
       )
@@ -446,13 +487,12 @@ export function ProduitModal({
       
     } catch (err: any) {
       setError(err.message || `Erreur lors de ${isEditMode ? 'la modification' : 'la création'}`)
-      throw err // Relancer pour que les appelants puissent gérer
+      throw err
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Suppression définitive
   const handlePermanentDelete = async () => {
     if (!isEditMode || !editingProduit) return
 
@@ -462,7 +502,6 @@ export function ProduitModal({
     try {
       const supabase = createClient()
 
-      // Supprimer la photo si elle existe
       if (editingProduit.photo_url) {
         const oldFileName = editingProduit.photo_url.split('/').pop()
         if (oldFileName) {
@@ -472,13 +511,11 @@ export function ProduitModal({
         }
       }
 
-      // Supprimer les relations produits_composants
       await supabase
         .from('produits_composants')
         .delete()
         .eq('produit_id', editingProduit.id)
 
-      // Supprimer définitivement de la base de données
       const { error: deleteError } = await supabase
         .from('produits')
         .delete()
@@ -486,272 +523,170 @@ export function ProduitModal({
 
       if (deleteError) throw deleteError
 
-      // Rafraîchir et fermer
       onSuccess()
       onClose()
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la suppression définitive')
     } finally {
       setIsLoading(false)
-      setShowDeleteConfirm(false)
     }
   }
   
-  // handleSubmit - gère Entrée et clic sur bouton
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validation
     if (!formData.name) {
       setError('Veuillez remplir le nom du produit')
       return
     }
     
-    // Si pas de changements, ne rien faire
     if (!hasChanges()) {
-      // Aucune modification à enregistrer
       return
     }
     
-    // Si des changements et en mode édition, ouvrir le popup
     if (hasChanges() && isEditMode) {
       setShowConfirmClose(true)
       return
     }
     
-    // Si nouveau (création) ou pas de changements, sauvegarder directement
     await performSave()
   }
   
-  // handleSaveAndClose avec logs de debug
   const handleSaveAndClose = async () => {
-    console.log('🔵 handleSaveAndClose - Début')
-    console.log('📝 formData:', formData)
-    console.log('🧩 selectedComposants:', selectedComposants)
-    console.log('✏️ isEditMode:', isEditMode)
-    console.log('📦 editingProduit:', editingProduit)
-    
     setShowConfirmClose(false)
     
-    // Validation
     if (!formData.name) {
-      console.log('❌ Validation échouée: nom manquant')
       setError('Veuillez remplir le nom du produit')
       return
     }
     
-    console.log('✅ Validation OK, démarrage sauvegarde...')
-    setIsLoading(true)
-    setError(null)
-    
-    try {
-      const supabase = createClient()
-      console.log('🔌 Supabase client créé')
-      
-      let photo_url: string | null = editingProduit?.photo_url || null
-      console.log('📸 photo_url initial:', photo_url)
-      
-      // Upload nouvelle photo si fichier sélectionné
-      if (photoFile) {
-        console.log('📤 Upload nouvelle photo...')
-        const fileExt = photoFile.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        
-        const { error: uploadError } = await supabase.storage
-          .from('produits-photos')
-          .upload(fileName, photoFile)
-        
-        if (uploadError) {
-          console.error('❌ Erreur upload photo:', uploadError)
-          throw uploadError
-        }
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('produits-photos')
-          .getPublicUrl(fileName)
-        
-        photo_url = publicUrl
-        console.log('✅ Photo uploadée:', photo_url)
-        
-        // Supprimer ancienne photo si existe
-        if (editingProduit?.photo_url) {
-          const oldFileName = editingProduit.photo_url.split('/').pop()
-          if (oldFileName) {
-            await supabase.storage
-              .from('produits-photos')
-              .remove([oldFileName])
-            console.log('🗑️ Ancienne photo supprimée')
-          }
-        }
-      }
-      
-      // Utilise directement prixVenteCalcule (défini plus bas)
-      console.log('💰 Prix composants:', prixTotalComposants)
-      console.log('⏱️ Coût temps:', coutTemps)
-      console.log('💵 Prix vente final:', prixVenteCalcule)
-      
-      const dataToSave = {
-        name: formData.name,
-        reference: formData.reference || null,
-        description: formData.description || null,
-        categorie_id: formData.categorie_id || null,
-        photo_url,
-        prix_vente_total: prixVenteCalcule,
-        prix_heure: formData.prix_heure || 0,
-        nombre_heures: formData.nombre_heures || 0,
-      }
-      console.log('💾 Données à sauvegarder:', dataToSave)
-      console.log('🔍 categorie_id dans dataToSave:', dataToSave.categorie_id)
-      
-      let produitId: string
-      
-      if (isEditMode) {
-        console.log('✏️ Mode ÉDITION - Update produit ID:', editingProduit?.id)
-        
-        if (!editingProduit?.id) {
-          console.error('❌ editingProduit.id est undefined!')
-          throw new Error('ID du produit manquant pour la modification')
-        }
-        
-        const { error: updateError } = await supabase
-          .from('produits')
-          .update(dataToSave)
-          .eq('id', editingProduit.id)
-        
-        if (updateError) {
-          console.error('❌ Erreur update produit:', updateError)
-          console.error('❌ Détails updateError:', JSON.stringify(updateError, null, 2))
-          throw updateError
-        }
-        
-        console.log('✅ Produit mis à jour')
-        produitId = editingProduit.id
-        
-        // Supprimer anciens composants
-        console.log('🗑️ Suppression anciens composants...')
-        const { error: deleteError } = await supabase
-          .from('produits_composants')
-          .delete()
-          .eq('produit_id', produitId)
-        
-        if (deleteError) {
-          console.error('❌ Erreur suppression composants:', deleteError)
-          console.error('❌ Détails deleteError:', JSON.stringify(deleteError, null, 2))
-          throw deleteError
-        }
-        console.log('✅ Anciens composants supprimés')
-        
-      } else {
-        console.log('➕ Mode CRÉATION - Insert nouveau produit')
-        
-        const { data: insertData, error: insertError } = await supabase
-          .from('produits')
-          .insert(dataToSave)
-          .select()
-          .single()
-        
-        if (insertError) {
-          console.error('❌ Erreur insert produit:', insertError)
-          console.error('❌ Détails insertError:', JSON.stringify(insertError, null, 2))
-          throw insertError
-        }
-        
-        if (!insertData) {
-          console.error('❌ Produit créé mais ID non retourné')
-          throw new Error('Produit créé mais ID non retourné')
-        }
-        
-        produitId = insertData.id
-        console.log('✅ Produit créé avec ID:', produitId)
-      }
-      
-      // Insérer nouveaux composants
-      if (selectedComposants.length > 0) {
-        console.log('📦 Insertion composants:', selectedComposants.length)
-        
-        const composantsToInsert = selectedComposants.map(sc => ({
-          produit_id: produitId,
-          composant_id: sc.composant_id,
-          quantite: sc.quantite
-        }))
-        console.log('📦 Composants à insérer:', composantsToInsert)
-        
-        const { error: insertComposantsError } = await supabase
-          .from('produits_composants')
-          .insert(composantsToInsert)
-        
-        if (insertComposantsError) {
-          console.error('❌ Erreur insertion composants:', insertComposantsError)
-          console.error('❌ Détails insertComposantsError:', JSON.stringify(insertComposantsError, null, 2))
-          throw insertComposantsError
-        }
-        console.log('✅ Composants insérés')
-      } else {
-        console.log('ℹ️ Aucun composant à insérer')
-      }
-
-      // Recalculer les projets brouillon qui utilisent ce produit
-      recalculerProjetsBrouillonPourProduit(produitId).catch((err) =>
-        console.error("Erreur recalcul projets brouillon:", err)
-      )
-      
-      console.log('🎉 Sauvegarde terminée avec succès !')
-      onSuccess()
-      onClose()
-      
-    } catch (err: any) {
-      console.error('💥 ERREUR DANS handleSaveAndClose:', err)
-      console.error('💥 Type:', typeof err)
-      console.error('💥 Message:', err?.message)
-      console.error('💥 Stack:', err?.stack)
-      console.error('💥 Objet complet:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
-      
-      // Afficher un message d'erreur plus détaillé
-      const errorMessage = err?.message || err?.toString() || JSON.stringify(err) || 'Erreur lors de la sauvegarde'
-      console.error('💥 Message d\'erreur final:', errorMessage)
-      
-      setError(errorMessage)
-      setShowConfirmClose(false)
-    } finally {
-      setIsLoading(false)
-      console.log('🏁 handleSaveAndClose - Fin')
-    }
+    await performSave()
   }
   
   if (!isOpen) return null
   
   return (
     <Fragment>
+      {/* Overlay */}
       <div 
         onClick={handleOverlayClick}
         className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       >
-        <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-4 sm:p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-purpl-black">
-                {isEditMode ? 'Modifier le produit' : 'Nouveau produit'}
-              </h2>
+        {/* Modal Container */}
+        <div 
+          className="rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+          style={{ backgroundColor: COLORS.ivoire }}
+        >
+          {/* ===== HEADER FIXE ===== */}
+          <div 
+            className="flex-shrink-0 p-6"
+            style={{ borderBottom: `1px solid ${COLORS.ecru}` }}
+          >
+            <div className="flex items-start justify-between gap-6">
+              {/* Photo + Titre */}
+              <div className="flex items-center gap-6">
+                {/* Photo Upload */}
+                <div className="flex-shrink-0">
+                  <div 
+                    className="w-32 h-32 rounded-lg flex items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: COLORS.ecru }}
+                  >
+                    {photoPreview ? (
+                      <img
+                        src={photoPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span style={{ color: COLORS.olive }}>
+                        <ImageIcon className="w-10 h-10" />
+                      </span>
+                    )}
+                  </div>
+                  {/* Input file caché */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+                  {/* Bouton Parcourir */}
+                  <button
+                    type="button"
+                    onClick={handleBrowseClick}
+                    className="mt-2 w-full px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: COLORS.olive }}
+                  >
+                    Parcourir
+                  </button>
+                </div>
+                
+                {/* Titre + ID */}
+                <div>
+                  <h2 
+                    className="text-2xl font-bold"
+                    style={{ color: COLORS.noir }}
+                  >
+                    {modalTitle}
+                  </h2>
+                  {isEditMode && editingProduit?.reference && (
+                    <p 
+                      className="text-sm mt-1"
+                      style={{ color: COLORS.olive }}
+                    >
+                      ID: {editingProduit.reference}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Bouton fermer */}
               <button
                 onClick={handleClose}
-                className="text-purpl-green hover:text-purpl-orange transition-colors"
+                className="p-2 hover:opacity-70 transition-opacity"
+                style={{ color: COLORS.olive }}
                 type="button"
               >
-                <CloseIcon className="w-6 h-6" />
+                <X size={24} />
               </button>
             </div>
-            
+          </div>
+          
+          {/* ===== CONTENU SCROLLABLE ===== */}
+          <div className="flex-1 overflow-y-auto p-6">
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              <div 
+                className="mb-6 p-4 rounded-lg border"
+                style={{ 
+                  backgroundColor: '#FEF2F2',
+                  borderColor: COLORS.rougeDoux,
+                  color: COLORS.rougeDoux 
+                }}
+              >
                 {error}
               </div>
             )}
             
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Nom + Référence */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-purpl-green mb-2">
+              {/* ===== SECTION: Informations générales ===== */}
+              <section>
+                <h3 
+                  className="text-lg font-semibold pb-3 mb-4"
+                  style={{ 
+                    color: COLORS.olive,
+                    borderBottom: `1px solid ${COLORS.ecru}`
+                  }}
+                >
+                  Informations générales
+                </h3>
+                
+                {/* Nom */}
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
                     Nom du produit *
                   </label>
                   <input
@@ -759,174 +694,151 @@ export function ProduitModal({
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                    placeholder="Ex: Table basse chêne"
+                    className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
+                    style={{ 
+                      borderColor: COLORS.ecru,
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.noir
+                    }}
+                    placeholder="Ex: Banc Light 450"
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-purpl-green mb-2">
-                    Référence
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.reference}
-                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                    placeholder="Ex: PRD-001"
-                  />
-                </div>
-              </div>
-              
-              {/* Catégorie */}
-              <div>
-                <label className="block text-sm font-medium text-purpl-green mb-2">
-                  Catégorie
-                </label>
-                
-                {/* Select catégorie */}
-                <select
-                  value={formData.categorie_id || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    
-                    // Si option "Gérer les catégories" cliquée
-                    if (value === '__manage__') {
-                      setShowCategoryManager(true);
-                      return;
-                    }
-                    
-                    // Sinon, changer la catégorie normalement
-                    setFormData({
-                      ...formData,
-                      categorie_id: value || null,
-                    });
-                  }}
-                  className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                >
-                  <option value="">Aucune catégorie</option>
-                  
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                  
-                  {/* Séparateur visuel */}
-                  <option disabled>────────────────</option>
-                  
-                  {/* Option gérer avec roue crantée */}
-                  <option 
-                    value="__manage__" 
-                    className="font-semibold"
-                    style={{ color: '#76715A' }}
-                  >
-                    ⚙ Gérer les catégories...
-                  </option>
-                </select>
-
-                {/* Preview pastille couleur si catégorie sélectionnée */}
-                {formData.categorie_id && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div
-                      className="w-6 h-6 rounded-full border-2 border-gray-300"
-                      style={{
-                        backgroundColor:
-                          categories.find((c) => c.id === formData.categorie_id)
-                            ?.color || '#ED693A',
+                {/* Référence + Catégorie */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Référence
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.reference}
+                      onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
                       }}
+                      placeholder="Ex: PRD-001"
                     />
-                    <span className="text-sm text-gray-600">
-                      {
-                        categories.find((c) => c.id === formData.categorie_id)
-                          ?.name
-                      }
-                    </span>
                   </div>
-                )}
-              </div>
-
-              {/* Modal gestion catégories */}
-              {showCategoryManager && (
-                <CategoryManagerModal
-                  type="produits"
-                  onClose={() => setShowCategoryManager(false)}
-                  onUpdate={fetchCategories}
-                />
-              )}
-              
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-purpl-green mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                  placeholder="Description du produit..."
-                />
-              </div>
-              
-              {/* Photo produit */}
-              <div>
-                <label className="block text-sm font-medium text-purpl-green mb-2">
-                  Photo du produit
-                </label>
-                <div className="flex items-center gap-4">
-                  <div className="w-32 h-32 bg-purpl-ecru rounded-lg flex items-center justify-center overflow-hidden">
-                    {photoPreview ? (
-                      <img
-                        src={photoPreview}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : editingProduit?.photo_url ? (
-                      <img
-                        src={editingProduit.photo_url}
-                        alt="Photo actuelle"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <ImageIcon className="w-6 h-6 text-purpl-green opacity-40" />
+                  
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Catégorie
+                    </label>
+                    <select
+                      value={formData.categorie_id || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '__manage__') {
+                          setShowCategoryManager(true);
+                          return;
+                        }
+                        setFormData({
+                          ...formData,
+                          categorie_id: value || null,
+                        });
+                      }}
+                      className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none"
+                      style={{ 
+                        borderColor: COLORS.ecru,
+                        backgroundColor: COLORS.ivoire,
+                        color: COLORS.noir
+                      }}
+                    >
+                      <option value="">Aucune catégorie</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      <option disabled>────────────────</option>
+                      <option value="__manage__">⚙ Gérer les catégories...</option>
+                    </select>
+                    
+                    {/* Preview pastille couleur */}
+                    {formData.categorie_id && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div
+                          className="w-5 h-5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              categories.find((c) => c.id === formData.categorie_id)?.color || COLORS.orangeChaud,
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: COLORS.olive }}>
+                          {categories.find((c) => c.id === formData.categorie_id)?.name}
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handlePhotoChange}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-              
-              {/* Sélecteur de composants */}
-              <div className="border-2 border-purpl-ecru rounded-lg p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold text-purpl-black">
-                    Composants ({selectedComposants.length})
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowComposantSelector(!showComposantSelector)}
-                    className="px-4 py-2 bg-purpl-green text-white rounded-lg hover:bg-purpl-green/90 transition-colors flex items-center gap-2"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    Ajouter un composant
-                  </button>
                 </div>
                 
-                {/* Liste composants sélectionnés */}
+                {/* Description */}
+                <div>
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={2}
+                    className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none resize-y"
+                    style={{ 
+                      borderColor: COLORS.ecru,
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.noir
+                    }}
+                    placeholder="Description du produit..."
+                  />
+                </div>
+              </section>
+              
+              {/* ===== SECTION: Composants ===== */}
+              <section 
+                className="p-6 rounded-lg border"
+                style={{ borderColor: COLORS.ecru }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h3 
+                    className="text-lg font-semibold"
+                    style={{ color: COLORS.olive }}
+                  >
+                    Composants
+                  </h3>
+                  <span 
+                    className="px-3 py-1 rounded text-sm font-semibold text-white"
+                    style={{ backgroundColor: COLORS.olive }}
+                  >
+                    {selectedComposants.length}
+                  </span>
+                </div>
+                
+                {/* Liste composants */}
                 {selectedComposants.length > 0 ? (
                   <div className="space-y-2 mb-4">
-                    {selectedComposants.map(sc => (
+                    {selectedComposants.map((sc, index) => (
                       <div 
                         key={sc.composant_id}
-                        className="flex items-center gap-3 p-3 bg-purpl-ecru rounded-lg"
+                        className="flex items-center gap-4 p-3 rounded-lg"
+                        style={{ backgroundColor: COLORS.ecru }}
                       >
-                        {/* Photo miniature */}
-                        <div className="w-12 h-12 bg-white rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {/* Photo */}
+                        <div 
+                          className="w-12 h-12 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0"
+                          style={{ backgroundColor: COLORS.olive }}
+                        >
                           {sc.composant.photo_url ? (
                             <img 
                               src={sc.composant.photo_url} 
@@ -934,134 +846,186 @@ export function ProduitModal({
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <ToolIcon className="w-6 h-6 text-purpl-green" />
+                            <ToolIcon className="w-6 h-6 text-white" />
                           )}
                         </div>
                         
-                        {/* Nom + Référence */}
+                        {/* Infos */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-purpl-black truncate">
+                          <p 
+                            className="font-medium truncate"
+                            style={{ color: COLORS.noir }}
+                          >
                             {sc.composant.name}
                           </p>
                           {sc.composant.reference && (
-                            <p className="text-xs text-purpl-green">
-                              Réf: {sc.composant.reference}
+                            <p 
+                              className="text-xs"
+                              style={{ color: COLORS.olive }}
+                            >
+                              {sc.composant.reference}
                             </p>
                           )}
                         </div>
                         
                         {/* Prix unitaire */}
                         <div className="text-right">
-                          <p className="text-sm text-purpl-black">
+                          <p 
+                            className="text-xs"
+                            style={{ color: COLORS.olive }}
+                          >
+                            Prix unitaire
+                          </p>
+                          <p 
+                            className="text-sm font-medium"
+                            style={{ color: COLORS.noir }}
+                          >
                             {sc.composant.prix_vente.toFixed(2)} €
                           </p>
-                          <p className="text-xs text-purpl-green">unitaire</p>
                         </div>
                         
-                        {/* Quantité */}
-                        <div className="flex items-center gap-2">
+                        {/* Quantité avec boutons +/- stylés */}
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleUpdateQuantite(sc.composant_id, sc.quantite - 1)}
-                            className="w-8 h-8 bg-white rounded border border-purpl-ecru hover:bg-purpl-ecru transition-colors flex items-center justify-center"
+                            className="w-8 h-8 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                            style={{ backgroundColor: COLORS.orangeDoux }}
                           >
-                            -
+                            −
                           </button>
                           <input
                             type="number"
                             min="1"
                             value={sc.quantite}
                             onChange={(e) => handleUpdateQuantite(sc.composant_id, parseInt(e.target.value) || 1)}
-                            className="w-16 text-center px-2 py-1 border-2 border-purpl-ecru rounded"
+                            className="w-14 text-center py-1 rounded border-2 focus:outline-none"
+                            style={{ 
+                              borderColor: COLORS.ecru,
+                              backgroundColor: COLORS.ivoire 
+                            }}
                           />
                           <button
                             type="button"
                             onClick={() => handleUpdateQuantite(sc.composant_id, sc.quantite + 1)}
-                            className="w-8 h-8 bg-white rounded border border-purpl-ecru hover:bg-purpl-ecru transition-colors flex items-center justify-center"
+                            className="w-8 h-8 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                            style={{ backgroundColor: COLORS.orangeDoux }}
                           >
                             +
                           </button>
                         </div>
                         
-                        {/* Total */}
-                        <div className="text-right w-24">
-                          <p className="font-semibold text-purpl-orange">
-                            {(sc.composant.prix_vente * sc.quantite).toFixed(2)} €
-                          </p>
+                        {/* Total ligne */}
+                        <div 
+                          className="text-right w-20 font-semibold"
+                          style={{ color: COLORS.orangeDoux }}
+                        >
+                          {(sc.composant.prix_vente * sc.quantite).toFixed(2)} €
                         </div>
                         
                         {/* Supprimer */}
                         <button
                           type="button"
-                          onClick={() => handleRemoveComposant(sc.composant_id)}
-                          className="p-2 hover:bg-red-100 rounded transition-colors"
-                          title="Retirer"
+                          onClick={() => setConfirmationModal({
+                            type: "delete-component",
+                            componentIndex: index,
+                            componentName: sc.composant.name,
+                          })}
+                          className="p-2 hover:opacity-70 transition-opacity"
+                          style={{ color: COLORS.rougeDoux }}
                         >
-                          <DeleteIcon className="w-5 h-5 text-red-600" />
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-purpl-green text-center py-4">
+                  <p 
+                    className="text-sm text-center py-4"
+                    style={{ color: COLORS.olive }}
+                  >
                     Aucun composant sélectionné
                   </p>
                 )}
                 
-                {/* Prix total composants */}
+                {/* Bouton ajouter */}
+                <button
+                  type="button"
+                  onClick={() => setShowComposantSelector(!showComposantSelector)}
+                  className="w-full py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 mb-4"
+                  style={{ backgroundColor: COLORS.olive }}
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Ajouter un composant
+                </button>
+                
+                {/* Sous-totaux */}
                 {selectedComposants.length > 0 && (
-                  <div className="pt-3 border-t border-purpl-ecru space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-purpl-black">
-                        Prix total composants :
-                      </span>
-                      <span className="text-xl font-bold text-purpl-orange">
+                  <div className="space-y-1" style={{ color: COLORS.noir }}>
+                    <p>
+                      <span className="font-medium">Sous-total composants :</span>{" "}
+                      <span style={{ color: COLORS.orangeDoux, fontWeight: 600 }}>
                         {prixTotalComposants.toFixed(2)} €
                       </span>
-                    </div>
-                    
-                    {/* Poids total */}
-                    {poidsTotal > 0 && (
-                      <div className="flex items-center gap-1 text-xs text-purpl-green">
-                        <WeightIcon className="w-4 h-4" />
-                        <span>{poidsTotal.toFixed(2)}</span>
-                      </div>
+                    </p>
+                    {calculatedData.totalWeight > 0 && (
+                      <p>
+                        <span className="font-medium">Poids total :</span>{" "}
+                        <span style={{ color: COLORS.olive, fontWeight: 600 }}>
+                          {calculatedData.totalWeight.toFixed(2)} kg
+                        </span>
+                      </p>
                     )}
                   </div>
                 )}
                 
-                {/* Sélecteur composants (popup) */}
+                {/* Sélecteur composants */}
                 {showComposantSelector && (
-                  <div className="mt-4 p-4 bg-white border-2 border-purpl-green rounded-lg">
+                  <div 
+                    className="mt-4 p-4 rounded-lg border-2"
+                    style={{ borderColor: COLORS.olive }}
+                  >
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="font-medium text-purpl-black">Bibliothèque composants</h4>
+                      <h4 className="font-medium" style={{ color: COLORS.olive }}>
+                        Bibliothèque composants
+                      </h4>
                       <button
                         type="button"
                         onClick={() => setShowComposantSelector(false)}
-                        className="text-purpl-green hover:text-purpl-orange"
+                        className="hover:opacity-70"
+                        style={{ color: COLORS.olive }}
                       >
-                        <CloseIcon className="w-5 h-5" />
+                        <X size={20} />
                       </button>
                     </div>
                     
-                    {/* Recherche et filtre catégorie */}
+                    {/* Recherche + Filtre */}
                     <div className="space-y-3 mb-3">
                       <div className="relative">
-                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purpl-green" />
+                        <span 
+                          className="absolute left-3 top-1/2 -translate-y-1/2"
+                          style={{ color: COLORS.olive }}
+                        >
+                          <SearchIcon className="w-4 h-4" />
+                        </span>
                         <input
                           type="text"
                           value={composantSearch}
                           onChange={(e) => setComposantSearch(e.target.value)}
                           placeholder="Rechercher un composant..."
-                          className="w-full pl-10 pr-4 py-2 border border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
+                          className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none"
+                          style={{ borderColor: COLORS.ecru }}
                         />
                       </div>
                       
-                      {/* Filtre par catégorie */}
                       <select
                         value={composantCategoryFilter}
                         onChange={(e) => setComposantCategoryFilter(e.target.value)}
-                        className="w-full px-4 py-2 border border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green bg-white"
+                        className="w-full px-4 py-2 rounded-lg border focus:outline-none"
+                        style={{ 
+                          borderColor: COLORS.ecru,
+                          backgroundColor: COLORS.ivoire 
+                        }}
                       >
                         <option value="all">Toutes les catégories</option>
                         {composantCategories.map((cat) => (
@@ -1072,7 +1036,7 @@ export function ProduitModal({
                       </select>
                     </div>
                     
-                    {/* Liste composants disponibles */}
+                    {/* Liste */}
                     <div className="max-h-60 overflow-y-auto space-y-2">
                       {filteredComposants.map(comp => {
                         const isSelected = selectedComposants.some(sc => sc.composant_id === comp.id)
@@ -1082,13 +1046,16 @@ export function ProduitModal({
                             key={comp.id}
                             type="button"
                             onClick={() => handleAddComposant(comp)}
-                            className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left ${
-                              isSelected 
-                                ? 'bg-purpl-orange/10 border border-purpl-orange' 
-                                : 'hover:bg-purpl-ecru border border-transparent'
-                            }`}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left"
+                            style={{ 
+                              backgroundColor: isSelected ? `${COLORS.orangeDoux}20` : 'transparent',
+                              border: isSelected ? `1px solid ${COLORS.orangeDoux}` : '1px solid transparent'
+                            }}
                           >
-                            <div className="w-10 h-10 bg-purpl-ecru rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                            <div 
+                              className="w-10 h-10 rounded flex items-center justify-center overflow-hidden flex-shrink-0"
+                              style={{ backgroundColor: COLORS.ecru }}
+                            >
                               {comp.photo_url ? (
                                 <img 
                                   src={comp.photo_url} 
@@ -1096,21 +1063,31 @@ export function ProduitModal({
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <ToolIcon className="w-5 h-5 text-purpl-green" />
+                                <span style={{ color: COLORS.olive }}>
+                                  <ToolIcon className="w-5 h-5" />
+                                </span>
                               )}
                             </div>
                             
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-purpl-black truncate flex items-center gap-2">
+                              <p 
+                                className="font-medium truncate flex items-center gap-2"
+                                style={{ color: COLORS.noir }}
+                              >
                                 {comp.name}
-                                {isSelected && <Check className="w-4 h-4 text-purpl-orange" />}
+                                {isSelected && <Check className="w-4 h-4" style={{ color: COLORS.orangeDoux }} />}
                               </p>
                               {comp.reference && (
-                                <p className="text-xs text-purpl-green">Réf: {comp.reference}</p>
+                                <p className="text-xs" style={{ color: COLORS.olive }}>
+                                  Réf: {comp.reference}
+                                </p>
                               )}
                             </div>
                             
-                            <p className="text-sm font-semibold text-purpl-orange">
+                            <p 
+                              className="text-sm font-semibold"
+                              style={{ color: COLORS.orangeDoux }}
+                            >
                               {comp.prix_vente.toFixed(2)} €
                             </p>
                           </button>
@@ -1118,142 +1095,317 @@ export function ProduitModal({
                       })}
                       
                       {filteredComposants.length === 0 && (
-                        <p className="text-sm text-purpl-green text-center py-4">
+                        <p 
+                          className="text-sm text-center py-4"
+                          style={{ color: COLORS.olive }}
+                        >
                           Aucun composant trouvé
                         </p>
                       )}
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
               
-              {/* Coût de la main d'œuvre */}
-              <div className="border-2 border-purpl-ecru rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-purpl-black mb-3">
+              {/* ===== SECTION: Main d'œuvre ===== */}
+              <section 
+                className="p-6 rounded-lg border"
+                style={{ borderColor: COLORS.ecru }}
+              >
+                <h3 
+                  className="text-lg font-semibold mb-4"
+                  style={{ color: COLORS.olive }}
+                >
                   Coût de la main d'œuvre
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Prix de l'heure (€/h)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.prix_heure}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        prix_heure: parseFloat(e.target.value) || 0 
-                      })}
-                      className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-purpl-green mb-2">
-                      Nombre d'heures (h)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={formData.nombre_heures}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        nombre_heures: parseFloat(e.target.value) || 0 
-                      })}
-                      className="w-full px-4 py-2 border-2 border-purpl-ecru rounded-lg focus:outline-none focus:border-purpl-green"
-                      placeholder="0.0"
-                    />
-                  </div>
-                </div>
                 
-                {/* Affichage coût temps calculé */}
-                {coutTemps > 0 && (
-                  <div className="mt-3 pt-3 border-t border-purpl-ecru">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-purpl-green">
-                        Coût temps :
-                      </span>
-                      <span className="text-sm font-semibold text-purpl-orange">
-                        {coutTemps.toFixed(2)} €
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                  {/* Prix de l'heure */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Prix de l'heure
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ 
+                          ...formData, 
+                          prix_heure: Math.max(0, (formData.prix_heure || 0) - 5) 
+                        })}
+                        className="w-10 h-10 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                        style={{ backgroundColor: COLORS.orangeDoux }}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.prix_heure}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          prix_heure: parseFloat(e.target.value) || 0 
+                        })}
+                        className="flex-1 text-center py-2 rounded-lg border-2 focus:outline-none"
+                        style={{ 
+                          borderColor: COLORS.ecru,
+                          backgroundColor: COLORS.ivoire 
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ 
+                          ...formData, 
+                          prix_heure: (formData.prix_heure || 0) + 5 
+                        })}
+                        className="w-10 h-10 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                        style={{ backgroundColor: COLORS.orangeDoux }}
+                      >
+                        +
+                      </button>
+                      <span 
+                        className="text-sm font-medium ml-2"
+                        style={{ color: COLORS.olive }}
+                      >
+                        €/h
                       </span>
                     </div>
                   </div>
-                )}
-              </div>
-              
-              {/* Résumé des coûts simplifié */}
-              <div className="bg-purpl-ecru rounded-lg p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-purpl-green">Prix composants (avec marge) :</span>
-                  <span className="font-medium text-purpl-black">
-                    {prixTotalComposants.toFixed(2)} €
-                  </span>
-                </div>
-                
-                {coutTemps > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-purpl-green">
-                      Main d'œuvre :
-                    </span>
-                    <span className="font-medium text-purpl-black">
-                      {coutTemps.toFixed(2)} €
-                    </span>
+                  
+                  {/* Nombre d'heures */}
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: COLORS.olive }}
+                    >
+                      Nombre d'heures
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ 
+                          ...formData, 
+                          nombre_heures: Math.max(0, (formData.nombre_heures || 0) - 0.5) 
+                        })}
+                        className="w-10 h-10 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                        style={{ backgroundColor: COLORS.orangeDoux }}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={formData.nombre_heures}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          nombre_heures: parseFloat(e.target.value) || 0 
+                        })}
+                        className="flex-1 text-center py-2 rounded-lg border-2 focus:outline-none"
+                        style={{ 
+                          borderColor: COLORS.ecru,
+                          backgroundColor: COLORS.ivoire 
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ 
+                          ...formData, 
+                          nombre_heures: (formData.nombre_heures || 0) + 0.5 
+                        })}
+                        className="w-10 h-10 rounded flex items-center justify-center text-white font-bold transition-opacity hover:opacity-80"
+                        style={{ backgroundColor: COLORS.orangeDoux }}
+                      >
+                        +
+                      </button>
+                      <span 
+                        className="text-sm font-medium ml-2"
+                        style={{ color: COLORS.olive }}
+                      >
+                        h
+                      </span>
+                    </div>
                   </div>
-                )}
-                
-                <div className="flex justify-between pt-3 border-t-2 border-purpl-orange">
-                  <span className="text-purpl-black font-bold text-lg">Prix vente final :</span>
-                  <span className="font-bold text-purpl-orange text-xl">
-                    {prixVenteCalcule.toFixed(2)} €
-                  </span>
                 </div>
-              </div>
+                
+                 {/* Sous-total main d'œuvre */}
+                 <p style={{ color: COLORS.noir }}>
+                   <span className="font-medium">Sous-total main d'œuvre :</span>{" "}
+                   <span style={{ color: COLORS.orangeDoux, fontWeight: 600 }}>
+                     {calculatedData.laborCost.toFixed(2)} €
+                   </span>
+                 </p>
+              </section>
               
-              {/* Bouton Supprimer définitivement - Uniquement en mode édition */}
+              {/* ===== SECTION: Récapitulatif financier ===== */}
+              <section
+                className="p-6 rounded-lg border-l-4"
+                style={{
+                  backgroundColor: COLORS.ecru,
+                  borderLeftColor: COLORS.olive,
+                }}
+              >
+                <h3 
+                  className="text-lg font-semibold mb-6" 
+                  style={{ color: COLORS.olive }}
+                >
+                  Récapitulatif financier
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  {/* Prix de revient */}
+                  <div 
+                    className="p-4 rounded-lg" 
+                    style={{ backgroundColor: COLORS.ivoire }}
+                  >
+                    <p 
+                      className="text-xs uppercase tracking-wider" 
+                      style={{ color: COLORS.olive }}
+                    >
+                      Prix de revient
+                    </p>
+                    <p 
+                      className="text-2xl font-bold mt-1" 
+                      style={{ color: COLORS.noir }}
+                    >
+                      {calculatedData.prixRevient.toFixed(2)} €
+                    </p>
+                  </div>
+
+                  {/* Prix de vente */}
+                  <div 
+                    className="p-4 rounded-lg" 
+                    style={{ backgroundColor: COLORS.ivoire }}
+                  >
+                    <p 
+                      className="text-xs uppercase tracking-wider" 
+                      style={{ color: COLORS.olive }}
+                    >
+                      Prix de vente
+                    </p>
+                    <p 
+                      className="text-2xl font-bold mt-1" 
+                      style={{ color: COLORS.olive }}
+                    >
+                      {calculatedData.prixVente.toFixed(2)} €
+                    </p>
+                  </div>
+
+                  {/* Marge € */}
+                  <div 
+                    className="p-4 rounded-lg" 
+                    style={{ backgroundColor: COLORS.ivoire }}
+                  >
+                    <p 
+                      className="text-xs uppercase tracking-wider" 
+                      style={{ color: COLORS.olive }}
+                    >
+                      Marge
+                    </p>
+                    <p
+                      className="text-2xl font-bold mt-1"
+                      style={{ color: getMargeColor(calculatedData.margeEuros) }}
+                    >
+                      {calculatedData.margeEuros.toFixed(2)} €
+                    </p>
+                  </div>
+
+                  {/* Marge % */}
+                  <div 
+                    className="p-4 rounded-lg" 
+                    style={{ backgroundColor: COLORS.ivoire }}
+                  >
+                    <p 
+                      className="text-xs uppercase tracking-wider" 
+                      style={{ color: COLORS.olive }}
+                    >
+                      Marge %
+                    </p>
+                    <div className="mt-1">
+                      <span
+                        className="px-3 py-1 rounded-full text-sm font-bold text-white inline-block"
+                        style={{ backgroundColor: getMargeBadgeColor(calculatedData.margePourcent) }}
+                      >
+                        {calculatedData.margePourcent.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Formules */}
+                <div 
+                  className="space-y-1 text-xs" 
+                  style={{ color: COLORS.olive }}
+                >
+                  <p>Prix de revient = Composants (coût) + Main d'œuvre</p>
+                  <p>Marge = Prix vente - Prix revient</p>
+                </div>
+              </section>
+              
+              {/* ===== Bouton Supprimer ===== */}
               {isEditMode && (
-                <div className="pt-4 border-t border-red-200">
+                <section>
                   <button
                     type="button"
-                    onClick={() => setShowDeleteConfirm(true)}
+                    onClick={() => setConfirmationModal({ type: "delete-product" })}
                     disabled={isLoading}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                    className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 border-2 hover:bg-red-50 disabled:opacity-50"
+                    style={{
+                      backgroundColor: COLORS.ivoire,
+                      color: COLORS.rougeDoux,
+                      borderColor: COLORS.rougeDoux,
+                    }}
                   >
-                    <DeleteIcon className="w-4 h-4" />
-                    Supprimer définitivement
+                    <Trash2 size={18} />
+                    Supprimer
                   </button>
-                  <p className="text-xs text-red-600 mt-2">
-                    Cette action est irréversible. Le produit sera supprimé de manière permanente.
-                  </p>
-                </div>
+                </section>
               )}
-              
-              {/* Actions */}
-              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="w-full sm:w-auto px-6 py-2 border-2 border-purpl-ecru rounded-lg hover:bg-purpl-ecru transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isLoading}
-                  className="px-6 py-2 bg-purpl-orange text-white rounded-lg hover:bg-purpl-orange/90 transition-colors disabled:opacity-50"
-                >
-                  {isLoading 
-                    ? (isEditMode ? 'Modification...' : 'Création...') 
-                    : (isEditMode ? 'Modifier le produit' : 'Créer le produit')
-                  }
-                </button>
-              </div>
             </form>
+          </div>
+          
+          {/* ===== FOOTER FIXE ===== */}
+          <div 
+            className="flex-shrink-0 flex justify-end gap-3 p-6"
+            style={{ borderTop: `1px solid ${COLORS.ecru}` }}
+          >
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-6 py-2 rounded-lg font-medium border-2 transition-colors"
+              style={{ 
+                borderColor: COLORS.olive,
+                color: COLORS.olive,
+                backgroundColor: COLORS.ivoire
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="px-6 py-2 rounded-lg font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: COLORS.orangeDoux }}
+            >
+              {isLoading 
+                ? (isEditMode ? 'Modification...' : 'Création...') 
+                : (isEditMode ? 'Modifier le produit' : 'Créer le produit')
+              }
+            </button>
           </div>
         </div>
       </div>
+      
+      {/* Modal gestion catégories */}
+      {showCategoryManager && (
+        <CategoryManagerModal
+          type="produits"
+          onClose={() => setShowCategoryManager(false)}
+          onUpdate={fetchCategories}
+        />
+      )}
       
       {/* Popup confirmation 3 boutons */}
       {showConfirmClose && (
@@ -1265,11 +1417,20 @@ export function ProduitModal({
           }}
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4"
         >
-          <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
-            <h3 className="text-xl font-bold text-purpl-black mb-4">
+          <div 
+            className="rounded-xl max-w-md w-full p-6"
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <h3 
+              className="text-xl font-bold mb-4"
+              style={{ color: COLORS.noir }}
+            >
               {isEditMode ? 'Modifications non enregistrées' : 'Création en cours'}
             </h3>
-            <p className="text-purpl-green mb-6">
+            <p 
+              className="mb-6"
+              style={{ color: COLORS.olive }}
+            >
               Vous avez des modifications non enregistrées. Que souhaitez-vous faire ?
             </p>
             
@@ -1278,7 +1439,8 @@ export function ProduitModal({
                 type="button"
                 onClick={handleSaveAndClose}
                 disabled={isLoading}
-                className="w-full px-6 py-3 bg-purpl-orange text-white rounded-lg hover:bg-purpl-orange/90 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ backgroundColor: COLORS.orangeDoux }}
               >
                 <SaveIcon className="w-5 h-5" />
                 {isLoading ? 'Enregistrement...' : 'Enregistrer et fermer'}
@@ -1287,7 +1449,11 @@ export function ProduitModal({
               <button
                 type="button"
                 onClick={handleCancelClose}
-                className="w-full px-6 py-3 border-2 border-purpl-green text-purpl-green rounded-lg hover:bg-purpl-ecru transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 border-2"
+                style={{ 
+                  borderColor: COLORS.olive,
+                  color: COLORS.olive 
+                }}
               >
                 <BackIcon className="w-5 h-5" />
                 Continuer l'édition
@@ -1296,7 +1462,11 @@ export function ProduitModal({
               <button
                 type="button"
                 onClick={handleConfirmClose}
-                className="w-full px-6 py-3 border-2 border-red-400 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 border-2"
+                style={{ 
+                  borderColor: COLORS.rougeDoux,
+                  color: COLORS.rougeDoux 
+                }}
               >
                 <DeleteIcon className="w-5 h-5" />
                 Abandonner les modifications
@@ -1306,46 +1476,101 @@ export function ProduitModal({
         </div>
       )}
 
-      {/* Modal de confirmation suppression définitive */}
-      {showDeleteConfirm && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowDeleteConfirm(false);
-            }
-          }}
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4"
-        >
-          <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6">
-            <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              ⚠️ Attention : Suppression définitive
+      {/* Popup confirmation suppression composant */}
+      {confirmationModal?.type === "delete-component" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.noir }}
+            >
+              Retirer ce composant ?
             </h3>
-            <p className="text-gray-700 mb-2">
-              Êtes-vous sûr de vouloir supprimer définitivement ce produit ?
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.olive }}
+            >
+              Voulez-vous retirer <strong>{confirmationModal.componentName}</strong> de ce produit ?
             </p>
-            <p className="text-sm text-gray-500 mb-6">
-              <span className="text-red-600 font-semibold">Cette action est irréversible.</span> Toutes les données associées seront perdues.
-            </p>
-
-            <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
               <button
-                type="button"
-                onClick={handlePermanentDelete}
-                disabled={isLoading}
-                className="w-full px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <DeleteIcon className="w-5 h-5" />
-                {isLoading ? "Suppression..." : "Oui, supprimer définitivement"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isLoading}
-                className="w-full px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                onClick={() => setConfirmationModal(null)}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
               >
                 Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmationModal.componentIndex !== undefined) {
+                    handleRemoveComposantByIndex(confirmationModal.componentIndex)
+                  }
+                  setConfirmationModal(null)
+                }}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                Retirer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup confirmation suppression produit */}
+      {confirmationModal?.type === "delete-product" && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div 
+            className="rounded-xl w-full max-w-sm p-6" 
+            style={{ backgroundColor: COLORS.ivoire }}
+          >
+            <div className="flex justify-center mb-4">
+              <AlertTriangle size={40} style={{ color: COLORS.rougeDoux }} />
+            </div>
+            <h3 
+              className="text-xl font-semibold text-center mb-2" 
+              style={{ color: COLORS.rougeDoux }}
+            >
+              Supprimer ce produit ?
+            </h3>
+            <p 
+              className="text-center text-sm mb-6" 
+              style={{ color: COLORS.noir }}
+            >
+              Cette action est irréversible. Toutes les données associées seront perdues.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmationModal(null)}
+                className="flex-1 px-4 py-2 rounded-lg font-medium border-2 transition-colors"
+                style={{
+                  color: COLORS.olive,
+                  borderColor: COLORS.olive,
+                  backgroundColor: COLORS.ivoire,
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete()
+                  setConfirmationModal(null)
+                }}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50"
+                style={{ backgroundColor: COLORS.rougeDoux }}
+              >
+                {isLoading ? "Suppression..." : "Supprimer définitivement"}
               </button>
             </div>
           </div>
@@ -1354,4 +1579,3 @@ export function ProduitModal({
     </Fragment>
   )
 }
-
