@@ -65,3 +65,4 @@
 La page `/test-supabase` contient encore des paddings fixes (`p-8`, `p-6`), mais c'est une page de debug/test, donc moins prioritaire. Elle pourra être corrigée si nécessaire.
 
 
+

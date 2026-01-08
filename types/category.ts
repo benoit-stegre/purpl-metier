@@ -37,3 +37,4 @@ export type Category = {
  */
 export type CategoryType = 'composants' | 'produits' | 'clients' | 'projets'
 
+

@@ -151,3 +151,4 @@ Le code est globalement de bonne qualité avec une structure responsive bien pen
 **Aucune modification fonctionnelle nécessaire** - Seulement des améliorations UX responsive.
 
 
+

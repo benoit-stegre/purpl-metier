@@ -234,3 +234,4 @@ ALTER TABLE produits
 2. Je peux appliquer les corrections si vous voulez
 3. Tester la modification d'un composant pour vérifier que les erreurs 400 ont disparu
 
+

@@ -96,3 +96,4 @@ await supabase
 
 Les variables `coutComposants` et `coutMainOeuvre` sont toujours calculées en mémoire (lignes 77-90), mais ne sont plus stockées en BDD. Seul `prix_vente_total` est mis à jour, ce qui est cohérent avec votre schéma actuel.
 
+

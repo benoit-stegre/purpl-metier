@@ -32,6 +32,8 @@ Thumbs.db
 *.BACKUP*
 *.CASSE_*
 *.before_restore_*
+*.bak
+*.bak2
 
 # Build
 dist/

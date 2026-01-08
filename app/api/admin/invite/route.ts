@@ -5,6 +5,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
+    // DEBUG: Vérifier les variables d'environnement
+    console.log('=== DEBUG INVITE ===')
+    console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'OK' : 'MISSING')
+    console.log('SERVICE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'OK' : 'MISSING')
+    
     // 1. Vérifier que l'utilisateur est connecté et admin
     const cookieStore = await cookies()
     
