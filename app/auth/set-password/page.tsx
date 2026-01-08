@@ -63,12 +63,10 @@ export default function SetPasswordPage() {
         <div className="text-center">
           <div className="flex justify-center">
             <Image
-              src="/logo-purpl.svg"
-              alt="PURPL"
-              width={22}
-              height={7}
-              className="h-auto w-auto"
-              style={{ filter: 'brightness(0)' }}
+              src="/LOGO VERT SLOGAN.svg"
+              alt="PURPL Solutions"
+              width={250}
+              height={100}
               priority
             />
           </div>
