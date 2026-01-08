@@ -70,7 +70,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Utiliser le client admin pour inviter
-    const adminClient = createAdminClient()
+    let adminClient
+    try {
+      adminClient = createAdminClient()
+    } catch (adminError) {
+      console.error('Erreur création client admin:', adminError)
+      return NextResponse.json(
+        { error: 'Configuration serveur invalide. Vérifiez SUPABASE_SERVICE_ROLE_KEY.' },
+        { status: 500 }
+      )
+    }
 
     const { data, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/confirm`,
