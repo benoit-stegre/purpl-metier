@@ -5,13 +5,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LogoutButton } from './LogoutButton'
 
-interface User {
-  email: string
-  role?: string
-}
-
 export function UserInfo() {
-  const [user, setUser] = useState<User | null>(null)
+  const [email, setEmail] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
 
   const supabase = createBrowserClient(
@@ -23,18 +19,21 @@ export function UserInfo() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        setUser({
-          email: user.email || '',
-          role: user.user_metadata?.role || 'user'
-        })
+        setEmail(user.email || '')
+
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .single()
+
+        setIsAdmin(userRole?.role === 'admin')
       }
     }
     getUser()
   }, [])
 
-  if (!user) return null
-
-  const isAdmin = user.role === 'admin' || user.email === 'benoit@purplsolutions.com'
+  if (!email) return null
 
   return (
     <div className="flex items-center gap-3">
@@ -109,7 +108,7 @@ export function UserInfo() {
       {/* Info utilisateur */}
       <div className="text-right">
         <p className="text-sm font-medium" style={{ color: '#FFFEF5' }}>
-          {user.email}
+          {email}
         </p>
         {isAdmin && (
           <p className="text-xs" style={{ color: '#ED693A' }}>

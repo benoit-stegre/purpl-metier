@@ -10,6 +10,7 @@ import CategoryManagerModal from "@/components/categories/CategoryManagerModal";
 import { SearchIcon } from "@/components/ui/Icons";
 import { AlertTriangle } from "lucide-react";
 import { usePageHeader } from "@/contexts/PageHeaderContext";
+import { toast } from "react-hot-toast";
 import type { Produit, ProduitKanban, ComposantForProduit, CategoryProduit } from "@/types";
 
 // Couleurs PURPL
@@ -49,6 +50,7 @@ export function ProduitsView({
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [localProduits, setLocalProduits] = useState<Produit[]>(initialProduits);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean
     produit: Produit | null
@@ -90,6 +92,12 @@ export function ProduitsView({
   };
 
   const fetchProduits = async () => {
+    // Éviter les appels multiples simultanés
+    if (isLoadingProducts) {
+      return;
+    }
+
+    setIsLoadingProducts(true);
     try {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -103,6 +111,7 @@ export function ProduitsView({
               id,
               name,
               reference,
+              prix_achat,
               prix_vente,
               photo_url,
               poids
@@ -117,13 +126,23 @@ export function ProduitsView({
         `)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       if (data) {
         setLocalProduits(data as Produit[]);
+      } else {
+        // Si data est null, on garde les données existantes
+        console.warn("Aucune donnée retournée lors du fetch des produits");
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Ne pas modifier localProduits en cas d'erreur pour éviter la perte de données
+      const errorMessage = error?.message || "Erreur inconnue lors du chargement des produits";
       console.error("Erreur fetch produits:", error);
+      toast.error(`Impossible de charger les produits : ${errorMessage}`);
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
@@ -159,8 +178,11 @@ export function ProduitsView({
       if (error) throw error;
 
       await fetchProduits();
-    } catch (error) {
+      toast.success("Produit supprimé avec succès");
+    } catch (error: any) {
+      const errorMessage = error?.message || "Erreur inconnue lors de la suppression";
       console.error('Erreur suppression:', error);
+      toast.error(`Impossible de supprimer le produit : ${errorMessage}`);
     }
   };
 
@@ -186,8 +208,11 @@ export function ProduitsView({
 
       await fetchProduits();
       setDeleteConfirm({ open: false, produit: null });
-    } catch (error) {
+      toast.success("Produit supprimé avec succès");
+    } catch (error: any) {
+      const errorMessage = error?.message || "Erreur inconnue lors de la suppression";
       console.error('Erreur suppression:', error);
+      toast.error(`Impossible de supprimer le produit : ${errorMessage}`);
     } finally {
       setIsDeleting(false);
     }
@@ -259,17 +284,26 @@ export function ProduitsView({
     <>
       {/* Vue Kanban */}
       {viewMode === "kanban" ? (
-        <ProduitsKanban
-          produits={produitsForKanban}
-          categories={categories}
-          onProduitClick={(p) => {
-            const fullProduit = localProduits.find((prod) => prod.id === p.id);
-            if (fullProduit) handleEdit(fullProduit);
-          }}
-          onProduitDuplicate={handleDuplicate}
-          onProduitDelete={handleDelete}
-          onNewProduit={handleNewProduit}
-        />
+        <>
+          {isLoadingProducts && (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-lg">Chargement des produits...</p>
+            </div>
+          )}
+          {!isLoadingProducts && (
+            <ProduitsKanban
+              produits={produitsForKanban}
+              categories={categories}
+              onProduitClick={(p) => {
+                const fullProduit = localProduits.find((prod) => prod.id === p.id);
+                if (fullProduit) handleEdit(fullProduit);
+              }}
+              onProduitDuplicate={handleDuplicate}
+              onProduitDelete={handleDelete}
+              onNewProduit={handleNewProduit}
+            />
+          )}
+        </>
       ) : (
         /* Vue Grille */
         <>
@@ -315,22 +349,30 @@ export function ProduitsView({
           </div>
 
           {/* Grille */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProduits.map((produit) => (
-              <ProduitCard
-                key={produit.id}
-                produit={produit}
-                onEdit={handleEdit}
-                onDuplicate={() => handleDuplicate(produit)}
-                onDelete={handleDeleteClick}
-              />
-            ))}
-          </div>
-
-          {filteredProduits.length === 0 && (
+          {isLoadingProducts ? (
             <div className="text-center py-12 text-gray-400">
-              <p className="text-lg">Aucun produit trouvé</p>
+              <p className="text-lg">Chargement des produits...</p>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredProduits.map((produit) => (
+                  <ProduitCard
+                    key={produit.id}
+                    produit={produit}
+                    onEdit={handleEdit}
+                    onDuplicate={() => handleDuplicate(produit)}
+                    onDelete={handleDeleteClick}
+                  />
+                ))}
+              </div>
+
+              {filteredProduits.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">Aucun produit trouvé</p>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

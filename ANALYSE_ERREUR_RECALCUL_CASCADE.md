@@ -235,3 +235,4 @@ ALTER TABLE produits
 3. Tester la modification d'un composant pour vérifier que les erreurs 400 ont disparu
 
 
+

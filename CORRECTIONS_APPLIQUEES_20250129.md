@@ -120,3 +120,4 @@ Les colonnes Kanban conservent leur `min-w-[260px]` car c'est nécessaire pour l
 
 
 
+

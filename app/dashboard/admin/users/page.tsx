@@ -105,8 +105,7 @@ export default function UsersPage() {
   }
 
   const canDelete = (user: InvitedUser) => {
-    // Ne peut pas supprimer soi-même ou l'admin principal
-    return user.email !== currentUserEmail && user.email !== 'benoit@purplsolutions.com'
+    return user.email !== currentUserEmail && user.role !== 'admin'
   }
 
   return (

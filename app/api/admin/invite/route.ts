@@ -1,15 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isUserAdmin } from '@/lib/utils/auth'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    // DEBUG: Vérifier les variables d'environnement
-    console.log('=== DEBUG INVITE ===')
-    console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'OK' : 'MISSING')
-    console.log('SERVICE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'OK' : 'MISSING')
-    
     // 1. Vérifier que l'utilisateur est connecté et admin
     const cookieStore = await cookies()
     
@@ -43,9 +39,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Vérifier le rôle admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                    user.email === 'benoit@purplsolutions.com'
+    const isAdmin = await isUserAdmin()
     
     if (!isAdmin) {
       return NextResponse.json(

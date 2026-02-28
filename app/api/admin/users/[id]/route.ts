@@ -1,6 +1,6 @@
-import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { cookies } from 'next/headers'
+import { isUserAdmin } from '@/lib/utils/auth'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function DELETE(
@@ -11,38 +11,15 @@ export async function DELETE(
     const { id: userIdToDelete } = await params
 
     // Vérifier que l'utilisateur est admin
-    const cookieStore = await cookies()
-    
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Ignore
-            }
-          },
-        },
-      }
-    )
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
 
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                    user.email === 'benoit@purplsolutions.com'
-    
+    const isAdmin = await isUserAdmin()
+
     if (!isAdmin) {
       return NextResponse.json({ error: 'Accès non autorisé' }, { status: 403 })
     }
@@ -55,10 +32,23 @@ export async function DELETE(
       )
     }
 
-    // Empêcher la suppression du compte admin principal
     const adminClient = createAdminClient()
-    
-    // Vérifier l'email de l'utilisateur à supprimer
+
+    // Vérifier que l'utilisateur à supprimer n'est pas admin
+    const { data: targetUserRole } = await adminClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userIdToDelete)
+      .single()
+
+    if (targetUserRole?.role === 'admin') {
+      return NextResponse.json(
+        { error: 'Impossible de supprimer un compte administrateur' }, 
+        { status: 400 }
+      )
+    }
+
+    // Vérifier que l'utilisateur existe
     const { data: { user: userToDelete }, error: getUserError } = 
       await adminClient.auth.admin.getUserById(userIdToDelete)
 
@@ -66,19 +56,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Utilisateur non trouvé' }, { status: 404 })
     }
 
-    if (userToDelete.email === 'benoit@purplsolutions.com') {
-      return NextResponse.json(
-        { error: 'Impossible de supprimer le compte administrateur principal' }, 
-        { status: 400 }
-      )
-    }
-
     // Supprimer l'utilisateur
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userIdToDelete)
 
     if (deleteError) {
-      console.error('Erreur suppression:', deleteError)
-      return NextResponse.json({ error: deleteError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 500 })
     }
 
     return NextResponse.json({ 
